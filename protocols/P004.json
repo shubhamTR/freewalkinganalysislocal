@@ -1,0 +1,21 @@
+{
+  "protocol_number": "P004",
+  "num_cycles": 0,
+  "has_optomotor": true,
+  "is_place_learning": false,
+  "is_intensity": false,
+  "has_probes": false,
+  "pixels_per_mm": 9.2,
+  "is_single_quadrant": false,
+  "labels": [],
+  "quad_patterns": [],
+  "colors": [],
+  "section_labels": [],
+  "section_colors": [],
+  "section_start_cycle": [],
+  "section_end_cycle": [],
+  "probe_cycles": [],
+  "training_cycles": [],
+  "om_cycles": [],
+  "num_blocks": 0
+}

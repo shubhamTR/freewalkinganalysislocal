@@ -1,36 +1,56 @@
 function cfg = get_protocol_config(protocol)
 % GET_PROTOCOL_CONFIG  Single source of truth for all protocol definitions.
 %
-%   cfg = get_protocol_config('P001')
+%   cfg = get_protocol_config('P017')
+%
+%   Checks protocols/<PROTOCOL>.json first. If found, loads from JSON —
+%   no code changes needed for new protocols, just create a JSON file with
+%   create_protocol_json.m. Falls back to the hardcoded switch/case below
+%   for protocols not yet converted to JSON.
 %
 %   Returns a struct with:
-%     .protocol       — protocol name (char)
-%     .num_cycles     — expected number of LED cycles
-%     .labels         — {1 x num_cycles} cell of cycle labels
-%     .colors         — {1 x num_cycles} cell of [R G B] per cycle
-%     .quad_patterns  — {1 x num_cycles} cell of 4-char strings
-%                       '1010' = Q1,Q3 lit; '0101' = Q2,Q4 lit; '1111' = all lit
-%     .sections       — struct array with .label, .color, .start_cycle, .end_cycle
-%     .probe_cycles   — vector of cycle indices that are probes ('1111' during learning)
-%     .training_cycles— vector of cycle indices that are training ('0101' or '1010')
-%     .om_cycles      — vector of cycle indices that are optomotor
-%     .has_optomotor  — logical
-%     .has_probes     — logical
-%     .is_place_learning — logical (P003, P005-P010)
-%     .is_intensity   — logical (P001, P002)
-%     .pixels_per_mm  — default calibration for this protocol
+%     .protocol          — protocol name (char)
+%     .num_cycles        — expected number of LED cycles
+%     .labels            — {1 x num_cycles} cell of cycle labels
+%     .colors            — {1 x num_cycles} cell of [R G B] per cycle
+%     .quad_patterns     — {1 x num_cycles} cell of 4-char strings
+%                          '1010' = Q1,Q3 lit; '0101' = Q2,Q4 lit; '1111' = all lit
+%     .sections          — struct array with .label, .color, .start_cycle, .end_cycle
+%     .probe_cycles      — vector of cycle indices that are probes
+%     .training_cycles   — vector of cycle indices that are training
+%     .om_cycles         — vector of cycle indices that are optomotor
+%     .has_optomotor     — logical
+%     .has_probes        — logical
+%     .is_place_learning — logical
+%     .is_intensity      — logical
+%     .pixels_per_mm     — default calibration for this protocol
+%     .preprobe_cycle    — cycle index labeled 'PP'
+%     .pretrain_cycle    — cycle index labeled 'Ag'
+%     .num_blocks        — number of training blocks
+%     .training_blocks   — {num_blocks x 1} cell of training cycle index vectors
+%     .block_probe_cycles— [B1.P, B2.P, ...] cycle indices
+%     .probe_labels      — {'PP', 'B1.P', ...}
+%     .all_probe_cycle_nums — [PP, B1.P, B2.P, ...] indices
+%     .block_labels      — {'B1', 'B2', ...}
 %
-%   Supported protocols: P001, P002, P003, P004, P005, P006, P007, P008,
-%   P009, P010, P011, P012, P013, P014, P015, P016, P017, P018, P019,
-%   P020, P021, P022, P023, P024, P025.
-%
-%   USAGE EXAMPLES:
-%     cfg = get_protocol_config('P001');
-%     fprintf('Protocol %s has %d cycles\n', cfg.protocol, cfg.num_cycles);
-%     for c = 1:cfg.num_cycles
-%         fprintf('  Cycle %d: %s  quad=%s\n', c, cfg.labels{c}, cfg.quad_patterns{c});
-%     end
+%   Optional fields (single-quadrant protocols only):
+%     .led_to_quad       — [2 3 4 1] hardware wiring pos→quadrant
+%     .probe_target_quad — default safe quad for probes without metadata
+%     .is_single_quadrant— logical
 
+    % ------------------------------------------------------------------
+    % JSON LOADER — check protocols/<PROTOCOL>.json first
+    % ------------------------------------------------------------------
+    json_file = fullfile(fileparts(mfilename('fullpath')), 'protocols', ...
+        [upper(protocol) '.json']);
+    if exist(json_file, 'file')
+        cfg = load_from_json(json_file, upper(protocol));
+        return;
+    end
+
+    % ------------------------------------------------------------------
+    % HARDCODED FALLBACK — protocols not yet converted to JSON
+    % ------------------------------------------------------------------
     RED    = [1 0 0];
     GREEN  = [0 0.6 0];
     BLUE   = [0 0 1];
@@ -165,11 +185,6 @@ function cfg = get_protocol_config(protocol)
 
         case {'P006', 'P007', 'P008', 'P009', 'P010', 'P011', 'P012', 'P014', 'P015', 'P016'}
             % Optomotor + Place learning: OM1 + PP + Ag + 4 blocks + OM2 = 48 cycles
-            % P011: Same as P008 but blank panels during training (visual only on probes)
-            % P012: Same as P008 but optomotor at 120fps/50s, LED intensity 6, brightness 6
-            % P014: Same as P008 but inverted pattern (dark on bright), bottom-aligned
-            % P015: Same as P014 but lower LED intensities (training=6, probe=4)
-            % P016: Same as P015 but all LED intensities at 4%
             num_blocks = 4;
             flips_per_block = 10;
             orient_seq = repmat([0, 1], 1, flips_per_block / 2);
@@ -210,30 +225,14 @@ function cfg = get_protocol_config(protocol)
 
         case {'P013', 'P017', 'P023', 'P024'}
             % Optomotor + SBD Place learning: OM1 + PP + Ag + 3 blocks + OM2 = 37 cycles
-            % Uses 4 orientations and 3-of-4 quadrant LED patterns (1101/1011/0111/1110)
-            % 3 training blocks (not 4), 10 flips per block
-            %
-            % Single-quadrant punishment (not diagonal pairs).
-            % Compute functions detect this from quad_patterns and use:
-            %   QPI = (N_safe - N_other) / N_total
-            % where safe = the single dark quadrant per cycle.
-            %
-            % P013: SBD pattern, LED intensity unspecified, brightness 6
-            % P017: SBD pattern, LED training=8 probe=6, brightness=6, probe intensity=6
-            %       Randomized trial orientations (no consecutive repeats)
-            %       NOTE: actual trial order varies per experiment — use metadata as ground truth
-            % P023: Opto + SBD PL, UNCOUPLED arena (arena shifts opposite to LED ori).
-            %       LED training=8 probe=6, SBD brightness=6. Arena shift: -(ori*48)+48
-            % P024: Opto + SBD PL, RANDOMLY DECOUPLED arena (arena_ori independent,
-            %       arena_ori ≠ led_ori). LED training=8 probe=6, SBD brightness=6.
             num_blocks = 3;
             flips_per_block = 10;
-            orient_seq = mod(0:(flips_per_block-1), 4);  % cycles through [0,1,2,3,0,1,2,3,0,1]
-            led_map = {'1101', '1011', '0111', '1110'};  % ori 0→1101, 1→1011, 2→0111, 3→1110
+            orient_seq = mod(0:(flips_per_block-1), 4);
+            led_map = {'1101', '1011', '0111', '1110'};
 
             labels = {'OM1', 'PP', 'Ag'};
             colors = {GREY, GREY, ORANGE};
-            quad_patterns = {'1111', '1111', '1110'};  % Ag uses 1110
+            quad_patterns = {'1111', '1111', '1110'};
             sections = struct('label', {}, 'color', {}, 'start_cycle', {}, 'end_cycle', {});
 
             for blk = 1:num_blocks
@@ -264,24 +263,11 @@ function cfg = get_protocol_config(protocol)
             cfg.has_probes = true;
             cfg.pixels_per_mm = 8.21;
             cfg.skip_analysis = false;
-            % LED string position → arena quadrant mapping (verified empirically)
-            %   LED pos 1 → Q2 (Top-Left)
-            %   LED pos 2 → Q3 (Bottom-Left)
-            %   LED pos 3 → Q4 (Bottom-Right)
-            %   LED pos 4 → Q1 (Top-Right)
-            % Results:
-            %   '1101' (pos 3 = 0) → Q4 dark/safe
-            %   '1011' (pos 2 = 0) → Q3 dark/safe
-            %   '0111' (pos 1 = 0) → Q2 dark/safe
-            %   '1110' (pos 4 = 0) → Q1 dark/safe
-            cfg.led_to_quad = [2, 3, 4, 1];  % pos 1→Q2, pos 2→Q3, pos 3→Q4, pos 4→Q1
-            cfg.probe_target_quad = 2;  % Q2 = correct visual stimulus during probes
+            cfg.led_to_quad = [2, 3, 4, 1];
+            cfg.probe_target_quad = 2;
 
         case 'P025'
             % Optomotor + SBD Place learning: OM1 + PP + Ag + 2 blocks + OM2 = 26 cycles
-            % Same as P017 (coupled arena) but 2 blocks instead of 3, and reduced
-            % LED intensities (training=3, probe=1) for V5 attenuator + thin diffuser.
-            % SBD brightness=6.
             num_blocks = 2;
             flips_per_block = 10;
             orient_seq = mod(0:(flips_per_block-1), 4);
@@ -323,9 +309,7 @@ function cfg = get_protocol_config(protocol)
             cfg.probe_target_quad = 2;
 
         case {'P018', 'P022'}
-            % Red-only intensity ramp: 7 intensities x 2 patterns x 3 reps = 42 cycles
-            % P018: Base version with standard optics
-            % P022: Same as P018 but with V11 attenuator + thin diffuser sandwich
+            % Red-only intensity ramp: 14 steps x 3 reps = 42 cycles
             intensities = [1, 1, 5, 5, 10, 10, 20, 20, 30, 30, 40, 40, 50, 50];
             n = length(intensities);
 
@@ -359,8 +343,7 @@ function cfg = get_protocol_config(protocol)
             cfg.pixels_per_mm = 9.20;
 
         case 'P019'
-            % Optomotor + SBD Place learning (same as P017 structure): 37 cycles
-            % Same as P017 but with dark place learning (brightness=0 during training)
+            % Optomotor + SBD dark place learning: 37 cycles (same structure as P017)
             num_blocks = 3;
             flips_per_block = 10;
             orient_seq = mod(0:(flips_per_block-1), 4);
@@ -403,9 +386,6 @@ function cfg = get_protocol_config(protocol)
 
         case {'P020', 'P021'}
             % Red stepped-block intensity: 3 blocks x 8 trials = 24 cycles
-            % P020: Standard optics
-            % P021: V11 attenuator + thin diffuser sandwich
-            % Block 1: 4@1% + 4@2%, Block 2: 4@3% + 4@4%, Block 3: 4@5% + 4@6%
             block_intensities = [1, 2; 3, 4; 5, 6];
             num_blocks = 3;
             trials_per_block = 8;
@@ -447,7 +427,7 @@ function cfg = get_protocol_config(protocol)
             cfg.pixels_per_mm = 9.20;
 
         otherwise
-            warning('Unknown protocol: %s', protocol);
+            warning('get_protocol_config: unknown protocol ''%s'' and no JSON file found in protocols/', protocol);
             labels = {};
             colors = {};
             quad_patterns = {};
@@ -461,22 +441,160 @@ function cfg = get_protocol_config(protocol)
             cfg.pixels_per_mm = 11.54;
     end
 
-    cfg.labels = labels;
-    cfg.colors = colors;
+    cfg.labels        = labels;
+    cfg.colors        = colors;
     cfg.quad_patterns = quad_patterns;
-    cfg.sections = sections;
+    cfg.sections      = sections;
 
-    % Default skip_analysis to false if not set by the protocol case
     if ~isfield(cfg, 'skip_analysis')
         cfg.skip_analysis = false;
     end
 
-    %% Derive convenience vectors from quad_patterns
+    cfg = add_derived_fields(cfg);
+end
+
+% =========================================================================
+%  LOCAL: load_from_json
+%  Reads protocols/<PROTOCOL>.json and returns a fully populated cfg struct.
+%  Handles two JSON formats:
+%    - Migration format (from migrate_protocols_to_json.m): has quad_patterns
+%      and section_labels/section_colors/section_start_cycle/section_end_cycle
+%    - create_protocol_json format: has led_patterns, training_blocks, colors as Nx3
+% =========================================================================
+function cfg = load_from_json(json_file, protocol)
+    raw = jsondecode(fileread(json_file));
+
+    cfg = struct();
+    cfg.protocol          = protocol;
+    cfg.num_cycles        = raw.num_cycles;
+    cfg.has_optomotor     = raw.has_optomotor;
+    cfg.is_place_learning = raw.is_place_learning;
+    cfg.is_intensity      = raw.is_intensity;
+    cfg.pixels_per_mm     = raw.pixels_per_mm;
+    cfg.has_probes        = isfield(raw, 'has_probes') && raw.has_probes;
+    cfg.skip_analysis     = false;
+
+    % Optional metadata fields
+    optional = {'display_name','description','led_intensity_training', ...
+                'led_intensity_probe','trial_duration_s','probe_duration_s', ...
+                'camera_fps','optomotor_duration_s','inter_direction_pause_s'};
+    for k = 1:numel(optional)
+        if isfield(raw, optional{k}), cfg.(optional{k}) = raw.(optional{k}); end
+    end
+
+    % Single-quadrant fields
+    if isfield(raw, 'led_to_quad') && ~isempty(raw.led_to_quad)
+        cfg.led_to_quad        = raw.led_to_quad(:)';
+        cfg.is_single_quadrant = true;
+    else
+        cfg.is_single_quadrant = isfield(raw,'is_single_quadrant') && raw.is_single_quadrant;
+    end
+    if isfield(raw, 'probe_target_quad'), cfg.probe_target_quad = raw.probe_target_quad; end
+
+    nc = raw.num_cycles;
+
+    % --- Labels ---
+    if iscell(raw.labels)
+        labels = raw.labels(:)';
+    else
+        labels = cellstr(raw.labels)';
+    end
+
+    % --- Colors (Nx3 matrix in both formats) ---
+    colors = cell(1, nc);
+    for c = 1:nc
+        colors{c} = raw.colors(c, :);
+    end
+
+    % --- quad_patterns ---
+    % Migration format stores quad_patterns directly.
+    % create_protocol_json format reconstructs from led_patterns.
+    if isfield(raw, 'quad_patterns')
+        if iscell(raw.quad_patterns)
+            quad_patterns = raw.quad_patterns(:)';
+        else
+            quad_patterns = cellstr(raw.quad_patterns)';
+        end
+    else
+        % Reconstruct from led_patterns
+        if isfield(raw, 'led_patterns')
+            if iscell(raw.led_patterns)
+                led_pats = raw.led_patterns(:)';
+            else
+                led_pats = cellstr(raw.led_patterns)';
+            end
+        else
+            led_pats = {'1010', '0101'};
+        end
+        quad_patterns = cell(1, nc);
+        train_idx = 0;
+        for c = 1:nc
+            lbl = labels{c};
+            if startsWith(lbl, 'OM') || strcmp(lbl, 'PP') || endsWith(lbl, '.P')
+                quad_patterns{c} = '1111';
+            elseif strcmp(lbl, 'Ag')
+                quad_patterns{c} = led_pats{1};
+            else
+                train_idx = train_idx + 1;
+                quad_patterns{c} = led_pats{mod(train_idx - 1, numel(led_pats)) + 1};
+            end
+        end
+    end
+
+    % --- Sections struct ---
+    % Migration format stores section_labels / section_colors / section_start_cycle / section_end_cycle.
+    % create_protocol_json format stores training_blocks + block_probe_cycles.
+    sections = struct('label', {}, 'color', {}, 'start_cycle', {}, 'end_cycle', {});
+    num_blocks = raw.num_blocks;
+
+    if isfield(raw, 'section_labels')
+        % Migration format
+        for s = 1:num_blocks
+            sections(s).label       = raw.section_labels{s};
+            sections(s).color       = raw.section_colors(s, :);
+            sections(s).start_cycle = raw.section_start_cycle(s);
+            sections(s).end_cycle   = raw.section_end_cycle(s);
+        end
+    elseif isfield(raw, 'training_blocks') && num_blocks > 0
+        % create_protocol_json format
+        if isnumeric(raw.training_blocks)
+            tb_cell = cell(num_blocks, 1);
+            for b = 1:num_blocks
+                tb_cell{b} = raw.training_blocks(b, :);
+            end
+        else
+            tb_cell = raw.training_blocks;
+        end
+        bp = raw.block_probe_cycles(:)';
+        for blk = 1:num_blocks
+            sections(blk).label       = sprintf('Block %d', blk);
+            sections(blk).color       = [0.8 0.1 0.1];
+            sections(blk).start_cycle = tb_cell{blk}(1);
+            sections(blk).end_cycle   = bp(blk);
+        end
+    end
+
+    cfg.labels        = labels;
+    cfg.colors        = colors;
+    cfg.quad_patterns = quad_patterns;
+    cfg.sections      = sections;
+
+    cfg = add_derived_fields(cfg);
+end
+
+% =========================================================================
+%  LOCAL: add_derived_fields
+%  Derives convenience vectors and plotter fields from labels/quad_patterns/sections.
+%  Called by both the JSON path and the switch/case path.
+% =========================================================================
+function cfg = add_derived_fields(cfg)
+    labels        = cfg.labels;
+    quad_patterns = cfg.quad_patterns;
     nc = length(quad_patterns);
 
-    probe_cycles = [];
+    probe_cycles    = [];
     training_cycles = [];
-    om_cycles = [];
+    om_cycles       = [];
 
     for c = 1:nc
         lbl = '';
@@ -488,37 +606,29 @@ function cfg = get_protocol_config(protocol)
         elseif strcmp(qp, '1111')
             probe_cycles = [probe_cycles, c]; %#ok<AGROW>
         elseif any(qp == '0')
-            % Any pattern with at least one dark quadrant is a training cycle
-            % Covers diagonal pairs ('1010','0101') and single-quad ('1101','1011','0111','1110')
             training_cycles = [training_cycles, c]; %#ok<AGROW>
         end
     end
 
-    cfg.probe_cycles = probe_cycles;
+    cfg.probe_cycles    = probe_cycles;
     cfg.training_cycles = training_cycles;
-    cfg.om_cycles = om_cycles;
+    cfg.om_cycles       = om_cycles;
 
-    %% Derive plotter convenience fields from labels
-    % preprobe_cycle: cycle labeled 'PP'
     pp_idx = find(strcmp(labels, 'PP'), 1);
-    cfg.preprobe_cycle = pp_idx;  % [] if no PP
+    cfg.preprobe_cycle = pp_idx;
 
-    % pretrain_cycle: cycle labeled 'Ag'
     ag_idx = find(strcmp(labels, 'Ag'), 1);
-    cfg.pretrain_cycle = ag_idx;  % [] if no Ag
+    cfg.pretrain_cycle = ag_idx;
 
-    % num_blocks: number of training blocks (from sections)
-    cfg.num_blocks = length(cfg.sections);
+    num_blks = length(cfg.sections);
+    cfg.num_blocks = num_blks;
 
-    % training_blocks: {[start end], ...} cycle ranges per block (training only)
-    num_blks = cfg.num_blocks;
     cfg.training_blocks = cell(num_blks, 1);
     for blk = 1:num_blks
         blk_all = cfg.sections(blk).start_cycle : cfg.sections(blk).end_cycle;
         cfg.training_blocks{blk} = intersect(blk_all, training_cycles);
     end
 
-    % block_probe_cycles: probe cycle per block [B1.P, B2.P, ...]
     blk_probes = [];
     for blk = 1:num_blks
         bp_lbl = sprintf('B%d.P', blk);
@@ -529,7 +639,6 @@ function cfg = get_protocol_config(protocol)
     end
     cfg.block_probe_cycles = blk_probes;
 
-    % probe_labels: {'PP', 'B1.P', 'B2.P', ...}
     plabels = {};
     if ~isempty(pp_idx), plabels{end+1} = 'PP'; end
     for blk = 1:num_blks
@@ -537,9 +646,6 @@ function cfg = get_protocol_config(protocol)
     end
     cfg.probe_labels = plabels;
 
-    % all_probe_cycle_nums: [PP, B1.P, B2.P, ...] cycle indices
     cfg.all_probe_cycle_nums = [pp_idx, blk_probes];
-
-    % block_labels: {'B1', 'B2', ...}
     cfg.block_labels = arrayfun(@(b) sprintf('B%d', b), 1:num_blks, 'UniformOutput', false);
 end
