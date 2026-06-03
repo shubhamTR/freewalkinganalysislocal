@@ -21,3 +21,8 @@ octave-workspace
 
 # macOS
 .DS_Store
+
+# R artifacts
+.Rhistory
+.RData
+.Rproj.user
