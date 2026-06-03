@@ -1,0 +1,23 @@
+# MATLAB compiled
+*.mex*
+*.p
+
+# Data files (large, live in analysisdatalocal)
+*.mat
+*.ufmf
+*.png
+*.fig
+*.svg
+*.pdf
+*.mp4
+
+# Trajectory dashboard JSON (large, generated)
+trajectory_dashboard/*.json
+trajectory_dashboard/manifest.json
+
+# MATLAB session/temp files
+*.asv
+octave-workspace
+
+# macOS
+.DS_Store

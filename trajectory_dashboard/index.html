@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Fly Trajectory Dashboard</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#111;color:#eee}
+
+.controls{padding:10px 16px;background:#1a1a1a;border-bottom:1px solid #333;display:flex;gap:12px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:100}
+.cg{display:flex;flex-direction:column;gap:2px}
+.cg label{font-size:10px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.5px}
+.cg select{padding:5px 8px;border:1px solid #444;border-radius:6px;font-size:13px;background:#222;color:#eee}
+.sep{width:1px;height:28px;background:#333}
+.fly-nav{display:flex;align-items:flex-end;gap:6px}
+.fly-nav button{padding:5px 10px;border:1px solid #444;border-radius:6px;background:#222;color:#eee;cursor:pointer;font-size:13px}
+.fly-nav button:hover{background:#333}
+.fly-nav button:disabled{opacity:.3}
+.fly-label{font-size:13px;font-weight:600;min-width:70px;text-align:center;line-height:30px}
+.info{font-size:11px;color:#888;margin-left:auto}
+.kb{font-size:10px;color:#555}
+
+.legend{display:flex;gap:14px;font-size:11px;color:#888;align-items:center;padding:5px 16px;background:#1a1a1a;border-bottom:1px solid #282828;flex-wrap:wrap}
+.legend-item{display:flex;align-items:center;gap:3px}
+.legend-dot{width:8px;height:8px;border-radius:50%}
+.badge{padding:1px 6px;border-radius:3px;font-size:10px;font-weight:600}
+
+.status{padding:40px;text-align:center;color:#666;font-size:14px}
+.status.error{color:#ff6b6b}
+
+.grid-wrap{padding:8px}
+.grid{display:grid;gap:3px}
+.tile{position:relative;background:#1a1a1a;border-radius:3px;overflow:hidden;aspect-ratio:1;cursor:pointer}
+.tile:hover{outline:2px solid #0071e3}
+.tile.selected{outline:2px solid #ff6b00}
+.tile canvas{width:100%;height:100%;display:block}
+.tile .lbl{position:absolute;top:1px;left:3px;font-size:8px;font-weight:700;z-index:2;text-shadow:0 1px 2px rgba(0,0,0,.9)}
+.tile .sq{position:absolute;bottom:1px;right:3px;font-size:7px;color:rgba(255,255,255,.4);z-index:2}
+
+.detail{position:fixed;top:0;right:0;width:400px;height:100vh;background:#1a1a1a;box-shadow:-2px 0 12px rgba(0,0,0,.5);z-index:200;display:none;flex-direction:column}
+.detail.open{display:flex}
+.detail-hdr{padding:12px 16px;border-bottom:1px solid #333;display:flex;justify-content:space-between;align-items:center}
+.detail-hdr h3{font-size:14px}
+.detail-close{background:none;border:none;font-size:22px;cursor:pointer;color:#888;line-height:1}
+.detail-body{flex:1;padding:16px;display:flex;align-items:center;justify-content:center}
+.detail-body canvas{max-width:100%;max-height:100%;border-radius:6px}
+.detail-info{padding:10px 16px;border-top:1px solid #333;font-size:12px;color:#888}
+
+/* Overlay mode */
+.overlay-wrap{display:none;padding:12px 16px}
+.overlay-wrap.active{display:flex;gap:16px;flex-wrap:wrap}
+.ov-section{background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:12px;min-width:200px}
+.ov-section h4{font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.fly-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;margin:3px;border:2px solid #444;border-radius:16px;font-size:12px;cursor:pointer;transition:all .15s;background:#222}
+.fly-chip:hover{border-color:#666}
+.fly-chip.picked{border-color:var(--fc);background:color-mix(in srgb,var(--fc) 15%,#222)}
+.fly-chip .fc-dot{width:10px;height:10px;border-radius:50%;display:none}
+.fly-chip.picked .fc-dot{display:block;background:var(--fc)}
+.cycle-chip{display:inline-block;padding:4px 10px;margin:3px;border:2px solid #444;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;background:#222}
+.cycle-chip:hover{border-color:#666}
+.cycle-chip.picked{border-color:#ff6b00;background:rgba(255,107,0,.12);color:#ff6b00}
+.ov-preview{flex:1;min-width:400px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.ov-preview canvas{border:1px solid #333;border-radius:6px;max-width:100%}
+.ov-actions{display:flex;gap:8px;align-items:center}
+.btn-svg{padding:7px 16px;border:1px solid #0071e3;border-radius:6px;background:#0071e3;color:#fff;font-size:13px;font-weight:600;cursor:pointer}
+.btn-svg:hover{background:#005ec0}
+.btn-svg:disabled{opacity:.3;cursor:default}
+.ov-hint{font-size:11px;color:#666}
+.legend-overlay{display:none;gap:14px;font-size:11px;color:#888;align-items:center;padding:5px 16px;background:#1a1a1a;border-bottom:1px solid #282828;flex-wrap:wrap}
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <div class="cg">
+    <label>Protocol</label>
+    <select id="sel-prot">
+      <option value="P008">P008</option>
+      <option value="P010">P010</option>
+      <option value="P011">P011</option>
+      <option value="P013">P013</option>
+      <option value="P014">P014</option>
+      <option value="P015">P015</option>
+      <option value="P016">P016</option>
+      <option value="P017">P017</option>
+      <option value="P019">P019</option>
+      <option value="P023">P023</option>
+    </select>
+  </div>
+  <div class="sep"></div>
+  <div class="cg">
+    <label>View</label>
+    <select id="sel-view">
+      <option value="all">All Cycles</option>
+      <option value="probes">Probes Only</option>
+    </select>
+  </div>
+  <div class="sep"></div>
+  <div class="cg">
+    <label>Display</label>
+    <select id="sel-display">
+      <option value="trajectory">Trajectory</option>
+      <option value="density">Density</option>
+      <option value="overlay">Overlay</option>
+    </select>
+  </div>
+  <div class="sep"></div>
+  <div class="cg">
+    <label>Experiment</label>
+    <select id="sel-exp"></select>
+  </div>
+  <div class="sep"></div>
+  <div class="fly-nav">
+    <div class="cg"><label>Fly</label></div>
+    <button id="btn-prev">&larr;</button>
+    <span class="fly-label" id="fly-lbl">—</span>
+    <button id="btn-next">&rarr;</button>
+  </div>
+  <div class="info" id="info"></div>
+  <span class="kb">&larr;&rarr; keys | Esc close detail</span>
+</div>
+
+<div class="legend" id="legend-traj">
+  <div class="legend-item"><span class="legend-dot" style="background:#00d4ff"></span>Trajectory</div>
+  <div class="legend-item"><span class="legend-dot" style="background:#00ff88"></span>Start</div>
+  <div class="legend-item"><span class="legend-dot" style="background:#ff4444"></span>End</div>
+  <div class="legend-item"><span class="legend-dot" style="background:rgba(0,200,80,.3);border:1px solid rgba(0,200,80,.5)"></span>Safe zone</div>
+  <div class="sep" style="height:14px"></div>
+  <span class="badge" style="background:#222;color:#ff6b6b">Training</span>
+  <span class="badge" style="background:#222;color:#ffd700">Probe</span>
+  <span class="badge" style="background:#222;color:#aaa">OM/PP/Ag</span>
+</div>
+<div class="legend" id="legend-density" style="display:none">
+  <span style="font-size:11px;color:#888">Density:</span>
+  <canvas id="density-cbar" width="120" height="12" style="border-radius:2px"></canvas>
+  <span style="font-size:10px;color:#666">Low</span>
+  <span style="font-size:10px;color:#666">High</span>
+  <div class="sep" style="height:14px"></div>
+  <span class="badge" style="background:#222;color:#ff6b6b">Training</span>
+  <span class="badge" style="background:#222;color:#ffd700">Probe</span>
+  <span class="badge" style="background:#222;color:#aaa">OM/PP/Ag</span>
+</div>
+
+<div class="legend-overlay" id="legend-overlay">
+  <span style="font-size:11px;color:#888">Overlay:</span>
+  <span id="ov-legend-flies"></span>
+  <div class="sep" style="height:14px"></div>
+  <span style="font-size:10px;color:#666">Click flies, then click cycles. Preview updates live.</span>
+</div>
+
+<div class="overlay-wrap" id="overlay-wrap">
+  <div class="ov-section" style="max-width:280px">
+    <h4>Select Flies (max 3)</h4>
+    <div id="ov-fly-list"></div>
+  </div>
+  <div class="ov-section" style="max-width:400px;max-height:60vh;overflow-y:auto">
+    <h4>Select Cycles</h4>
+    <div id="ov-cycle-list"></div>
+  </div>
+  <div class="ov-preview">
+    <div class="ov-section" style="width:100%">
+      <h4>Preview</h4>
+      <canvas id="ov-canvas" width="700" height="700"></canvas>
+      <div class="ov-actions">
+        <button class="btn-svg" id="btn-save-svg" disabled>Save SVG</button>
+        <span class="ov-hint" id="ov-hint">Pick flies and cycles to preview</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="status" class="status">Select a protocol to load...</div>
+<div class="grid-wrap" style="display:none" id="grid-wrap">
+  <div class="grid" id="grid"></div>
+</div>
+
+<div class="detail" id="detail">
+  <div class="detail-hdr">
+    <h3 id="d-title">Cycle</h3>
+    <button class="detail-close" id="d-close">&times;</button>
+  </div>
+  <div class="detail-body"><canvas id="d-canvas" width="600" height="600"></canvas></div>
+  <div class="detail-info" id="d-info"></div>
+</div>
+
+<script>
+const LTQ = [2,3,4,1];
+const cache = {};
+let S = {prot:null, exp:null, fi:0, sel:-1, data:null, view:'all', display:'trajectory'};
+// Muted, distinguishable palette (non-fluorescent) — cycles if >10 flies
+const OV_PALETTE = [
+  '#e07040','#4a90d9','#5daa68','#c75da3','#d4a843',
+  '#7b6cb0','#c26258','#3ea5a0','#a08040','#7888b0',
+  '#d48060','#5580a8','#8a6db5','#b09850','#6aaa90'
+];
+function ovColor(i) { return OV_PALETTE[i % OV_PALETTE.length]; }
+let OV = {flies:[], cycles:[]};  // overlay state: selected fly indices and cycle indices
+
+function lblCol(l) {
+  if (!l) return '#aaa';
+  if (l.includes('.P') || l==='PP') return '#ffd700';
+  if (l.startsWith('OM') || l==='Ag') return '#aaa';
+  return '#ff6b6b';
+}
+
+function safeQ(tp) {
+  if (!tp) return [];
+  const d = [];
+  for (let i = 0; i < tp.length; i++) if (tp[i] === '0') d.push(i);
+  if (d.length >= 1 && d.length <= 2) return d.map(i => LTQ[i]);
+  return [];
+}
+
+function isProbeLabel(l) {
+  return l === 'PP' || /^B\d+\.P$/.test(l);
+}
+
+function getVisibleCycles(e) {
+  // Returns array of original cycle indices to display
+  const nc = e.nc;
+  if (S.view === 'all') return Array.from({length: nc}, (_, i) => i);
+  // probes: PP and B*.P
+  const vis = [];
+  for (let ci = 0; ci < nc; ci++) {
+    const lbl = e.lb?.[ci] || '';
+    if (isProbeLabel(lbl)) vis.push(ci);
+  }
+  return vis;
+}
+
+function drawArena(ctx, xc, yc, r, w, h, sq) {
+  const sc = Math.min(w,h) / (r*2.2), cx = w/2, cy = h/2, sr = r*sc;
+  for (const q of sq) {
+    ctx.fillStyle = 'rgba(0,200,80,0.2)';
+    ctx.beginPath();
+    if (q===1) ctx.rect(cx, cy-sr*1.05, sr*1.05, sr*1.05);
+    else if (q===2) ctx.rect(cx-sr*1.05, cy-sr*1.05, sr*1.05, sr*1.05);
+    else if (q===3) ctx.rect(cx-sr*1.05, cy, sr*1.05, sr*1.05);
+    else ctx.rect(cx, cy, sr*1.05, sr*1.05);
+    ctx.fill();
+  }
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, cy, sr, 0, Math.PI*2); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 0.5;
+  ctx.setLineDash([3,3]); ctx.beginPath();
+  ctx.moveTo(cx-sr, cy); ctx.lineTo(cx+sr, cy);
+  ctx.moveTo(cx, cy-sr); ctx.lineTo(cx, cy+sr);
+  ctx.stroke(); ctx.setLineDash([]);
+  return {cx, cy, sr, sc};
+}
+
+function drawTraj(ctx, xs, ys, xc, yc, a, col, lw) {
+  if (!xs || xs.length < 2) return;
+  const {cx, cy, sc} = a;
+  ctx.strokeStyle = col || '#00d4ff'; ctx.lineWidth = lw || 1.5;
+  ctx.globalAlpha = 0.85; ctx.beginPath();
+  let started = false;
+  for (let i = 0; i < xs.length; i++) {
+    if (xs[i] == null || ys[i] == null) { started = false; continue; }
+    const px = cx + (xs[i]-xc)*sc, py = cy + (ys[i]-yc)*sc;
+    if (!started) { ctx.moveTo(px,py); started = true; } else ctx.lineTo(px,py);
+  }
+  ctx.stroke(); ctx.globalAlpha = 1;
+
+  // Start marker
+  if (xs[0] != null) {
+    const sx = cx+(xs[0]-xc)*sc, sy = cy+(ys[0]-yc)*sc;
+    ctx.fillStyle = '#00ff88'; ctx.beginPath();
+    ctx.arc(sx, sy, lw>2?5:3, 0, Math.PI*2); ctx.fill();
+  }
+  // End marker
+  const li = xs.length - 1;
+  if (xs[li] != null) {
+    const ex = cx+(xs[li]-xc)*sc, ey = cy+(ys[li]-yc)*sc;
+    ctx.strokeStyle = '#ff4444'; ctx.lineWidth = lw>2?2.5:1.5;
+    const m = lw>2?5:3;
+    ctx.beginPath(); ctx.moveTo(ex-m,ey-m); ctx.lineTo(ex+m,ey+m); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ex+m,ey-m); ctx.lineTo(ex-m,ey+m); ctx.stroke();
+  }
+}
+
+// Density colormap: dark blue → mustard yellow (matches MATLAB pipeline)
+function densityColor(t) {
+  // t in [0,1]
+  const r = Math.round(255 * (0.1 + 0.8 * t));
+  const g = Math.round(255 * (0.1 + 0.65 * t));
+  const b = Math.round(255 * (0.4 - 0.3 * t));
+  return [r, g, b];
+}
+
+function drawDensityColorbar() {
+  const cv = document.getElementById('density-cbar');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  for (let x = 0; x < 120; x++) {
+    const [r,g,b] = densityColor(x / 119);
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(x, 0, 1, 12);
+  }
+}
+
+function computeDensity(xs, ys, xc, yc, r, nBins) {
+  // Bin fly positions into nBins x nBins grid, return 2D density array
+  const grid = Array.from({length: nBins}, () => new Float32Array(nBins));
+  if (!xs || xs.length < 1) return {grid, max: 0};
+  const step = (r * 2) / nBins;
+  let maxVal = 0;
+  for (let i = 0; i < xs.length; i++) {
+    if (xs[i] == null || ys[i] == null) continue;
+    const dx = xs[i] - xc, dy = ys[i] - yc;
+    if (dx*dx + dy*dy > r*r) continue;  // outside arena
+    const col = Math.floor((dx + r) / step);
+    const row = Math.floor((dy + r) / step);
+    if (row >= 0 && row < nBins && col >= 0 && col < nBins) {
+      grid[row][col]++;
+      if (grid[row][col] > maxVal) maxVal = grid[row][col];
+    }
+  }
+  return {grid, max: maxVal};
+}
+
+function drawDensity(ctx, xs, ys, xc, yc, r, w, h, sq, nBins) {
+  nBins = nBins || 24;
+  const {grid, max} = computeDensity(xs, ys, xc, yc, r, nBins);
+  const sc = Math.min(w,h) / (r*2.2), cx = w/2, cy = h/2, sr = r*sc;
+  const step = (sr * 2) / nBins;
+
+  // Draw safe zone shading first
+  for (const q of sq) {
+    ctx.fillStyle = 'rgba(0,200,80,0.15)';
+    ctx.beginPath();
+    if (q===1) ctx.rect(cx, cy-sr*1.05, sr*1.05, sr*1.05);
+    else if (q===2) ctx.rect(cx-sr*1.05, cy-sr*1.05, sr*1.05, sr*1.05);
+    else if (q===3) ctx.rect(cx-sr*1.05, cy, sr*1.05, sr*1.05);
+    else ctx.rect(cx, cy, sr*1.05, sr*1.05);
+    ctx.fill();
+  }
+
+  // Draw density bins
+  if (max > 0) {
+    for (let row = 0; row < nBins; row++) {
+      for (let col = 0; col < nBins; col++) {
+        if (grid[row][col] === 0) continue;
+        // Check if bin center is inside arena circle
+        const bx = (col + 0.5) * step - sr;
+        const by = (row + 0.5) * step - sr;
+        if (bx*bx + by*by > sr*sr) continue;
+
+        const t = grid[row][col] / max;
+        const [cr, cg, cb] = densityColor(t);
+        ctx.fillStyle = `rgba(${cr},${cg},${cb},${0.3 + 0.7*t})`;
+        ctx.fillRect(cx - sr + col * step, cy - sr + row * step, step + 0.5, step + 0.5);
+      }
+    }
+  }
+
+  // Arena outline + crosshairs
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, cy, sr, 0, Math.PI*2); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 0.5;
+  ctx.setLineDash([3,3]); ctx.beginPath();
+  ctx.moveTo(cx-sr, cy); ctx.lineTo(cx+sr, cy);
+  ctx.moveTo(cx, cy-sr); ctx.lineTo(cx, cy+sr);
+  ctx.stroke(); ctx.setLineDash([]);
+}
+
+function updateLegend() {
+  document.getElementById('legend-traj').style.display = S.display === 'trajectory' ? '' : 'none';
+  document.getElementById('legend-density').style.display = S.display === 'density' ? '' : 'none';
+  if (S.display === 'density') drawDensityColorbar();
+}
+
+async function loadProtocol(prot) {
+  if (cache[prot]) return cache[prot];
+  const status = document.getElementById('status');
+  status.style.display = 'block'; status.className = 'status';
+  status.textContent = `Loading ${prot}...`;
+  document.getElementById('grid-wrap').style.display = 'none';
+
+  try {
+    const resp = await fetch(`${prot}.json`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    cache[prot] = data;
+    return data;
+  } catch(e) {
+    status.className = 'status error';
+    status.textContent = `Failed to load ${prot}.json: ${e.message}. Make sure you're serving from the trajectory_dashboard folder.`;
+    return null;
+  }
+}
+
+function populateExps(data) {
+  const sel = document.getElementById('sel-exp');
+  sel.innerHTML = '';
+  for (const e of Object.keys(data)) {
+    const o = document.createElement('option');
+    o.value = e;
+    const p = e.split('_');
+    o.textContent = p[0] + '_' + p.slice(2).join('_');
+    sel.appendChild(o);
+  }
+  S.exp = sel.value;
+}
+
+function render() {
+  const d = S.data; if (!d || !S.exp || !d[S.exp]) return;
+  if (S.display === 'overlay') return;  // overlay has its own renderer
+  document.getElementById('overlay-wrap').className = 'overlay-wrap';
+  document.getElementById('legend-overlay').style.display = 'none';
+  const e = d[S.exp];
+  const nc = e.nc, nf = e.flies.length, fly = e.flies[S.fi];
+  const visCycles = getVisibleCycles(e);
+  const nVis = visCycles.length;
+
+  document.getElementById('fly-lbl').textContent = `${S.fi+1} / ${nf}`;
+  document.getElementById('btn-prev').disabled = S.fi === 0;
+  document.getElementById('btn-next').disabled = S.fi >= nf-1;
+  const viewLabel = S.view === 'probes' ? `${nVis} probes` : `${nc} cycles`;
+  document.getElementById('info').textContent = `${viewLabel} | ${nf} flies | Fly ${fly.i}`;
+
+  const cols = nVis<=5?nVis : nVis<=12?4 : nVis<=24?6 : nVis<=37?8 : 10;
+  const g = document.getElementById('grid');
+  g.style.gridTemplateColumns = `repeat(${cols},1fr)`;
+  g.innerHTML = '';
+  document.getElementById('status').style.display = 'none';
+  document.getElementById('grid-wrap').style.display = 'block';
+
+  for (let vi = 0; vi < nVis; vi++) {
+    const ci = visCycles[vi];  // original cycle index
+    const tile = document.createElement('div');
+    tile.className = 'tile' + (ci===S.sel?' selected':'');
+
+    const cv = document.createElement('canvas');
+    cv.width = 160; cv.height = 160;
+    tile.appendChild(cv);
+
+    const lb = document.createElement('div'); lb.className = 'lbl';
+    const label = e.lb?.[ci] || ('C'+(ci+1));
+    lb.textContent = label; lb.style.color = lblCol(label);
+    tile.appendChild(lb);
+
+    const tp = e.tp?.[ci];
+    const sq = safeQ(tp);
+    if (sq.length) {
+      const sl = document.createElement('div'); sl.className = 'sq';
+      sl.textContent = 'Q'+sq.join('+'); tile.appendChild(sl);
+    }
+
+    tile.addEventListener('click', () => openDetail(ci));
+    g.appendChild(tile);
+
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(0,0,160,160);
+    const c = fly.c[ci];
+    if (S.display === 'density') {
+      if (c) drawDensity(ctx, c[0], c[1], e.xc, e.yc, e.r, 160, 160, sq, 20);
+    } else {
+      const ar = drawArena(ctx, e.xc, e.yc, e.r, 160, 160, sq);
+      if (c) drawTraj(ctx, c[0], c[1], e.xc, e.yc, ar, '#00d4ff', 1.2);
+    }
+  }
+  updateLegend();
+}
+
+function openDetail(ci) {
+  S.sel = ci;
+  const e = S.data[S.exp], fly = e.flies[S.fi], c = fly.c[ci];
+  const label = e.lb?.[ci] || ('C'+(ci+1));
+  document.getElementById('d-title').textContent = `${label} — Fly ${fly.i}`;
+
+  const cv = document.getElementById('d-canvas'), ctx = cv.getContext('2d');
+  ctx.fillStyle = '#1a1a1a'; ctx.fillRect(0, 0, 600, 600);
+  const tp = e.tp?.[ci], sq = safeQ(tp);
+  if (S.display === 'density') {
+    if (c) drawDensity(ctx, c[0], c[1], e.xc, e.yc, e.r, 600, 600, sq, 40);
+  } else {
+    const ar = drawArena(ctx, e.xc, e.yc, e.r, 600, 600, sq);
+    if (c) drawTraj(ctx, c[0], c[1], e.xc, e.yc, ar, '#00d4ff', 2.5);
+  }
+
+  const lp = e.lp?.[ci] || '?';
+  let info = `LED: ${lp}`;
+  if (tp && lp !== tp) info += ` | Target: ${tp}`;
+  if (sq.length) info += ` | Safe: Q${sq.join('+')}`;
+  if (c) info += ` | ${c[0].length} frames`;
+  document.getElementById('d-info').textContent = info;
+  document.getElementById('detail').classList.add('open');
+  render();
+}
+
+// Event listeners
+document.getElementById('d-close').onclick = () => {
+  document.getElementById('detail').classList.remove('open');
+  S.sel = -1; render();
+};
+document.getElementById('btn-prev').onclick = () => { if (S.fi>0) { S.fi--; S.sel=-1; render(); } };
+document.getElementById('btn-next').onclick = () => {
+  const e = S.data?.[S.exp];
+  if (e && S.fi < e.flies.length-1) { S.fi++; S.sel=-1; render(); }
+};
+
+document.getElementById('sel-exp').onchange = function() {
+  S.exp = this.value; S.fi = 0; S.sel = -1;
+  if (S.display === 'overlay') { OV.flies = []; OV.cycles = []; populateOverlay(); }
+  else render();
+};
+
+document.getElementById('sel-view').onchange = function() {
+  S.view = this.value; S.sel = -1; render();
+};
+
+document.getElementById('sel-display').onchange = function() {
+  S.display = this.value; S.sel = -1;
+  const isOverlay = S.display === 'overlay';
+  document.getElementById('overlay-wrap').className = isOverlay ? 'overlay-wrap active' : 'overlay-wrap';
+  document.getElementById('grid-wrap').style.display = isOverlay ? 'none' : 'block';
+  document.getElementById('legend-overlay').style.display = isOverlay ? 'flex' : 'none';
+  // hide other legends in overlay
+  if (isOverlay) {
+    document.getElementById('legend-traj').style.display = 'none';
+    document.getElementById('legend-density').style.display = 'none';
+    OV.flies = []; OV.cycles = [];
+    populateOverlay();
+  } else {
+    render();
+  }
+};
+
+document.getElementById('sel-prot').onchange = async function() {
+  const prot = this.value;
+  S.prot = prot; S.fi = 0; S.sel = -1;
+  S.data = await loadProtocol(prot);
+  if (S.data) {
+    populateExps(S.data);
+    if (S.display === 'overlay') { OV.flies = []; OV.cycles = []; populateOverlay(); }
+    else render();
+  }
+};
+
+document.addEventListener('keydown', ev => {
+  if (ev.key === 'ArrowLeft') { document.getElementById('btn-prev').click(); ev.preventDefault(); }
+  if (ev.key === 'ArrowRight') { document.getElementById('btn-next').click(); ev.preventDefault(); }
+  if (ev.key === 'Escape') document.getElementById('d-close').click();
+});
+
+// ========= Overlay mode =========
+
+function populateOverlay() {
+  if (!S.data || !S.exp || !S.data[S.exp]) return;
+  const e = S.data[S.exp];
+
+  // Fly chips
+  const flyDiv = document.getElementById('ov-fly-list');
+  flyDiv.innerHTML = '';
+  e.flies.forEach((fly, fi) => {
+    const chip = document.createElement('span');
+    chip.className = 'fly-chip';
+    chip.dataset.fi = fi;
+    const dot = document.createElement('span');
+    dot.className = 'fc-dot';
+    chip.appendChild(dot);
+    chip.appendChild(document.createTextNode('Fly ' + fly.i));
+    chip.onclick = () => toggleOvFly(fi);
+    flyDiv.appendChild(chip);
+  });
+
+  // Cycle chips
+  const cyDiv = document.getElementById('ov-cycle-list');
+  cyDiv.innerHTML = '';
+  for (let ci = 0; ci < e.nc; ci++) {
+    const label = e.lb?.[ci] || ('C' + (ci + 1));
+    const chip = document.createElement('span');
+    chip.className = 'cycle-chip';
+    chip.dataset.ci = ci;
+    chip.textContent = label;
+    chip.style.color = lblCol(label);
+    chip.onclick = () => toggleOvCycle(ci);
+    cyDiv.appendChild(chip);
+  }
+
+  renderOverlayPreview();
+}
+
+function toggleOvFly(fi) {
+  const idx = OV.flies.indexOf(fi);
+  if (idx >= 0) {
+    OV.flies.splice(idx, 1);
+  } else {
+    // no limit on number of flies
+    OV.flies.push(fi);
+  }
+  // Update chip styles
+  document.querySelectorAll('#ov-fly-list .fly-chip').forEach(chip => {
+    const cfi = parseInt(chip.dataset.fi);
+    const oi = OV.flies.indexOf(cfi);
+    if (oi >= 0) {
+      chip.classList.add('picked');
+      chip.style.setProperty('--fc', ovColor(oi));
+    } else {
+      chip.classList.remove('picked');
+    }
+  });
+  updateOvLegend();
+  renderOverlayPreview();
+}
+
+function toggleOvCycle(ci) {
+  const idx = OV.cycles.indexOf(ci);
+  if (idx >= 0) OV.cycles.splice(idx, 1);
+  else OV.cycles.push(ci);
+  OV.cycles.sort((a, b) => a - b);
+
+  document.querySelectorAll('#ov-cycle-list .cycle-chip').forEach(chip => {
+    const cci = parseInt(chip.dataset.ci);
+    chip.classList.toggle('picked', OV.cycles.includes(cci));
+  });
+  renderOverlayPreview();
+}
+
+function updateOvLegend() {
+  const e = S.data?.[S.exp];
+  const container = document.getElementById('ov-legend-flies');
+  container.innerHTML = '';
+  OV.flies.forEach((fi, oi) => {
+    const item = document.createElement('span');
+    item.className = 'legend-item';
+    item.style.display = 'inline-flex';
+    item.style.marginRight = '10px';
+    const dot = document.createElement('span');
+    dot.className = 'legend-dot';
+    dot.style.background = ovColor(oi);
+    item.appendChild(dot);
+    const txt = document.createTextNode(' Fly ' + (e ? e.flies[fi].i : fi));
+    item.appendChild(txt);
+    container.appendChild(item);
+  });
+}
+
+function renderOverlayPreview() {
+  const cv = document.getElementById('ov-canvas');
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(0, 0, cv.width, cv.height);
+
+  const e = S.data?.[S.exp];
+  if (!e) return;
+
+  const btn = document.getElementById('btn-save-svg');
+  const hint = document.getElementById('ov-hint');
+  const hasSel = OV.flies.length > 0 && OV.cycles.length > 0;
+  btn.disabled = !hasSel;
+
+  if (!hasSel) {
+    hint.textContent = `${OV.flies.length} flies, ${OV.cycles.length} cycles selected`;
+    return;
+  }
+
+  // Use first selected cycle's safe zones for arena drawing
+  const tp = e.tp?.[OV.cycles[0]];
+  const sq = safeQ(tp);
+  const ar = drawArena(ctx, e.xc, e.yc, e.r, cv.width, cv.height, sq);
+
+  // Draw each fly × cycle combination
+  const lineStyles = [[], [8,4], [3,3]];  // solid, dashed, dotted per cycle
+  for (let oi = 0; oi < OV.flies.length; oi++) {
+    const fi = OV.flies[oi];
+    const fly = e.flies[fi];
+    const col = ovColor(oi);
+
+    for (let cj = 0; cj < OV.cycles.length; cj++) {
+      const ci = OV.cycles[cj];
+      const c = fly.c[ci];
+      if (!c) continue;
+
+      const dash = OV.cycles.length > 1 ? lineStyles[Math.min(cj, lineStyles.length - 1)] : [];
+      ctx.setLineDash(dash);
+      drawTraj(ctx, c[0], c[1], e.xc, e.yc, ar, col, 2);
+      ctx.setLineDash([]);
+    }
+  }
+
+  // Build hint text
+  const flyNames = OV.flies.map(fi => 'Fly ' + e.flies[fi].i);
+  const cycNames = OV.cycles.map(ci => e.lb?.[ci] || ('C' + (ci + 1)));
+  hint.textContent = `${flyNames.join(', ')} × ${cycNames.join(', ')}`;
+}
+
+// SVG export
+document.getElementById('btn-save-svg').onclick = function() {
+  const e = S.data?.[S.exp];
+  if (!e || OV.flies.length === 0 || OV.cycles.length === 0) return;
+
+  const W = 700, H = 700;
+  const r = e.r, xc = e.xc, yc = e.yc;
+  const sc = Math.min(W, H) / (r * 2.2);
+  const cx = W / 2, cy = H / 2, sr = r * sc;
+
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">\n`;
+  svg += `<rect width="${W}" height="${H}" fill="#1a1a1a"/>\n`;
+
+  // Safe zone shading for first cycle
+  const tp = e.tp?.[OV.cycles[0]];
+  const sq = safeQ(tp);
+  for (const q of sq) {
+    let rx, ry;
+    if (q === 1) { rx = cx; ry = cy - sr * 1.05; }
+    else if (q === 2) { rx = cx - sr * 1.05; ry = cy - sr * 1.05; }
+    else if (q === 3) { rx = cx - sr * 1.05; ry = cy; }
+    else { rx = cx; ry = cy; }
+    svg += `<rect x="${rx}" y="${ry}" width="${sr*1.05}" height="${sr*1.05}" fill="rgba(0,200,80,0.2)"/>\n`;
+  }
+
+  // Arena circle
+  svg += `<circle cx="${cx}" cy="${cy}" r="${sr}" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>\n`;
+  // Crosshairs
+  svg += `<line x1="${cx-sr}" y1="${cy}" x2="${cx+sr}" y2="${cy}" stroke="rgba(255,255,255,0.12)" stroke-width="0.5" stroke-dasharray="3,3"/>\n`;
+  svg += `<line x1="${cx}" y1="${cy-sr}" x2="${cx}" y2="${cy+sr}" stroke="rgba(255,255,255,0.12)" stroke-width="0.5" stroke-dasharray="3,3"/>\n`;
+
+  // Line dash patterns per cycle index
+  const dashPatterns = ['', '8,4', '3,3'];
+
+  // Trajectories
+  for (let oi = 0; oi < OV.flies.length; oi++) {
+    const fi = OV.flies[oi];
+    const fly = e.flies[fi];
+    const col = ovColor(oi);
+
+    for (let cj = 0; cj < OV.cycles.length; cj++) {
+      const ci = OV.cycles[cj];
+      const c = fly.c[ci];
+      if (!c) continue;
+
+      const xs = c[0], ys = c[1];
+      const dash = OV.cycles.length > 1 ? dashPatterns[Math.min(cj, dashPatterns.length - 1)] : '';
+
+      // Build path
+      let d = '';
+      let started = false;
+      for (let i = 0; i < xs.length; i++) {
+        if (xs[i] == null || ys[i] == null) { started = false; continue; }
+        const px = cx + (xs[i] - xc) * sc;
+        const py = cy + (ys[i] - yc) * sc;
+        if (!started) { d += `M${px.toFixed(1)},${py.toFixed(1)}`; started = true; }
+        else d += `L${px.toFixed(1)},${py.toFixed(1)}`;
+      }
+      if (d) {
+        const dashAttr = dash ? ` stroke-dasharray="${dash}"` : '';
+        svg += `<path d="${d}" fill="none" stroke="${col}" stroke-width="2" opacity="0.85"${dashAttr}/>\n`;
+      }
+
+      // Start marker (circle)
+      if (xs[0] != null) {
+        const sx = cx + (xs[0] - xc) * sc, sy = cy + (ys[0] - yc) * sc;
+        svg += `<circle cx="${sx.toFixed(1)}" cy="${sy.toFixed(1)}" r="4" fill="${col}"/>\n`;
+      }
+      // End marker (x)
+      const li = xs.length - 1;
+      if (xs[li] != null) {
+        const ex = cx + (xs[li] - xc) * sc, ey = cy + (ys[li] - yc) * sc;
+        svg += `<line x1="${(ex-4).toFixed(1)}" y1="${(ey-4).toFixed(1)}" x2="${(ex+4).toFixed(1)}" y2="${(ey+4).toFixed(1)}" stroke="${col}" stroke-width="2"/>\n`;
+        svg += `<line x1="${(ex+4).toFixed(1)}" y1="${(ey-4).toFixed(1)}" x2="${(ex-4).toFixed(1)}" y2="${(ey+4).toFixed(1)}" stroke="${col}" stroke-width="2"/>\n`;
+      }
+    }
+  }
+
+  // Legend
+  const legendY = H - 30;
+  const flyNames = OV.flies.map(fi => 'Fly ' + e.flies[fi].i);
+  const cycNames = OV.cycles.map(ci => e.lb?.[ci] || ('C' + (ci + 1)));
+  for (let oi = 0; oi < OV.flies.length; oi++) {
+    const lx = 20 + oi * 100;
+    svg += `<circle cx="${lx}" cy="${legendY}" r="5" fill="${ovColor(oi)}"/>\n`;
+    svg += `<text x="${lx+10}" y="${legendY+4}" fill="#ccc" font-size="12" font-family="sans-serif">${flyNames[oi]}</text>\n`;
+  }
+  // Cycle legend with dash patterns
+  for (let cj = 0; cj < OV.cycles.length; cj++) {
+    const lx = 20 + OV.flies.length * 100 + cj * 100;
+    const dash = OV.cycles.length > 1 ? dashPatterns[Math.min(cj, dashPatterns.length - 1)] : '';
+    const dashAttr = dash ? ` stroke-dasharray="${dash}"` : '';
+    svg += `<line x1="${lx}" y1="${legendY}" x2="${lx+25}" y2="${legendY}" stroke="#aaa" stroke-width="2"${dashAttr}/>\n`;
+    svg += `<text x="${lx+30}" y="${legendY+4}" fill="#ccc" font-size="12" font-family="sans-serif">${cycNames[cj]}</text>\n`;
+  }
+
+  // Title
+  svg += `<text x="${W/2}" y="20" fill="#eee" font-size="14" font-family="sans-serif" text-anchor="middle" font-weight="bold">${S.prot} ${S.exp.split('_').slice(0,1).join('')} — ${flyNames.join(', ')} × ${cycNames.join(', ')}</text>\n`;
+
+  svg += '</svg>';
+
+  // Trigger download
+  const blob = new Blob([svg], {type: 'image/svg+xml'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const tag = `overlay_${S.prot}_${flyNames.join('_').replace(/ /g,'')}_${cycNames.join('_')}`;
+  a.download = tag + '.svg';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+// Auto-load first protocol
+(async () => {
+  const prot = document.getElementById('sel-prot').value;
+  S.prot = prot;
+  S.data = await loadProtocol(prot);
+  if (S.data) { populateExps(S.data); render(); }
+})();
+</script>
+</body>
+</html>
