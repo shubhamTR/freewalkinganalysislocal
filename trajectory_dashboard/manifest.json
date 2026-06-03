@@ -1,0 +1,52 @@
+{
+  "P008": {
+    "n_exp": 18,
+    "n_flies": 186,
+    "size_mb": 0
+  },
+  "P010": {
+    "n_exp": 10,
+    "n_flies": 100,
+    "size_mb": 0
+  },
+  "P011": {
+    "n_exp": 6,
+    "n_flies": 60,
+    "size_mb": 0
+  },
+  "P013": {
+    "n_exp": 5,
+    "n_flies": 58,
+    "size_mb": 33.0
+  },
+  "P014": {
+    "n_exp": 6,
+    "n_flies": 69,
+    "size_mb": 49.8
+  },
+  "P015": {
+    "n_exp": 8,
+    "n_flies": 93,
+    "size_mb": 67.1
+  },
+  "P016": {
+    "n_exp": 4,
+    "n_flies": 46,
+    "size_mb": 33.1
+  },
+  "P017": {
+    "n_exp": 6,
+    "n_flies": 66,
+    "size_mb": 30.8
+  },
+  "P019": {
+    "n_exp": 5,
+    "n_flies": 58,
+    "size_mb": 33.0
+  },
+  "P023": {
+    "n_exp": 7,
+    "n_flies": 82,
+    "size_mb": 46.5
+  }
+}

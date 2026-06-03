@@ -11,9 +11,8 @@
 *.pdf
 *.mp4
 
-# Trajectory dashboard JSON (large, generated)
-trajectory_dashboard/*.json
-trajectory_dashboard/manifest.json
+# Trajectory dashboard data JSON (large, generated) — manifest.json is tracked
+trajectory_dashboard/P*.json
 
 # MATLAB session/temp files
 *.asv
