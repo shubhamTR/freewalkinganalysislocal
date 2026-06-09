@@ -103,13 +103,18 @@ def parse_metadata_led_patterns(exp_path):
     )
 
     # --- Parse ori-to-LED pairing ---
+    # Matches both "Pairing: ori 0→1101" (P023) and "LED Pairing: led_ori 0→1101" (P024+)
     ori_to_led = {}
     for ln in lines:
         ln_s = ln.strip()
-        if ln_s.startswith("Pairing:"):
+        if "Pairing:" in ln_s:
             toks = re.findall(r"ori\s+(\d+)\s*[→\->]+\s*(\d{4})", ln_s)
             for ori_s, led_s in toks:
                 ori_to_led[int(ori_s)] = led_s
+
+    # Fallback: standard 4-orientation SBD pairing used across P013–P027
+    if not ori_to_led:
+        ori_to_led = {0: "1101", 1: "1011", 2: "0111", 3: "1110"}
 
     # --- Try Randomized Orientation Log first (P017+) ---
     rand_start = None
