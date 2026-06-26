@@ -73,5 +73,20 @@
     "n_exp": 7,
     "n_flies": 78,
     "size_mb": 32.2
+  },
+  "P030": {
+    "n_exp": 7,
+    "n_flies": 81,
+    "size_mb": 33.3
+  },
+  "P031": {
+    "n_exp": 4,
+    "n_flies": 47,
+    "size_mb": 19.1
+  },
+  "P032": {
+    "n_exp": 5,
+    "n_flies": 56,
+    "size_mb": 22.9
   }
 }
