@@ -1,4 +1,14 @@
 {
+  "P001": {
+    "n_exp": 14,
+    "n_flies": 166,
+    "size_mb": 73.6
+  },
+  "P002": {
+    "n_exp": 18,
+    "n_flies": 212,
+    "size_mb": 94.1
+  },
   "P008": {
     "n_exp": 18,
     "n_flies": 186,
@@ -51,13 +61,13 @@
   },
   "P024": {
     "n_exp": 9,
-    "n_flies": 96,
-    "size_mb": 54.2
+    "n_flies": 97,
+    "size_mb": 54.8
   },
   "P025": {
-    "n_exp": 6,
-    "n_flies": 68,
-    "size_mb": 27.8
+    "n_exp": 9,
+    "n_flies": 104,
+    "size_mb": 42.7
   },
   "P027": {
     "n_exp": 7,

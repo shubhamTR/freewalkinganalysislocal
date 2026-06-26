@@ -285,6 +285,10 @@ def extract_experiment(exp_path, protocol):
     off_times = np.atleast_1d(ld.off_times).astype(int)
     nc = len(on_times)
 
+    if nc == 0:
+        print(f"    SKIP {exp_name}: LED_detector has no cycles")
+        return None
+
     # --- Parse metadata patterns ---
     led_patterns, training_patterns = parse_metadata_led_patterns(exp_path)
 
