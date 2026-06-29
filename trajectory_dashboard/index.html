@@ -254,8 +254,9 @@ function drawArena(ctx, xc, yc, r, w, h, sq, label) {
   const probe = isProbeLabel(label || '');
   const isOM = label && label.startsWith('OM');
 
-  // Unsafe quadrants → light red (OM gets all 4 at lighter shade since sq=[])
-  for (const q of [1,2,3,4].filter(q => !sq.includes(q))) {
+  // Unsafe quadrants → light red; for probe/OM all 4 are red (green arc marks target)
+  const redQuads = (probe || isOM) ? [1,2,3,4] : [1,2,3,4].filter(q => !sq.includes(q));
+  for (const q of redQuads) {
     ctx.fillStyle = isOM ? 'rgba(210,50,50,0.1)' : 'rgba(210,50,50,0.2)';
     ctx.beginPath(); drawQuadRect(ctx, q, cx, cy, sr); ctx.fill();
   }
@@ -373,8 +374,9 @@ function drawDensity(ctx, xs, ys, xc, yc, r, w, h, sq, nBins, label) {
   const probe = isProbeLabel(label || '');
   const isOM = label && label.startsWith('OM');
 
-  // Unsafe quadrants → light red (OM gets all 4 at lighter shade since sq=[])
-  for (const q of [1,2,3,4].filter(q => !sq.includes(q))) {
+  // Unsafe quadrants → light red; for probe/OM all 4 are red (green arc marks target)
+  const redQuads = (probe || isOM) ? [1,2,3,4] : [1,2,3,4].filter(q => !sq.includes(q));
+  for (const q of redQuads) {
     ctx.fillStyle = isOM ? 'rgba(210,50,50,0.1)' : 'rgba(210,50,50,0.15)';
     ctx.beginPath(); drawQuadRect(ctx, q, cx, cy, sr); ctx.fill();
   }
@@ -771,8 +773,9 @@ document.getElementById('btn-save-svg').onclick = function() {
   const svgProbe = isProbeLabel(svgLabel0);
   const svgIsOM = svgLabel0.startsWith('OM');
 
-  // Unsafe quadrants → light red (OM gets all 4 at lighter shade)
-  for (const q of [1,2,3,4].filter(q => !sq.includes(q))) {
+  // Unsafe quadrants → light red; for probe/OM all 4 are red (green arc marks target)
+  const svgRedQuads = (svgProbe || svgIsOM) ? [1,2,3,4] : [1,2,3,4].filter(q => !sq.includes(q));
+  for (const q of svgRedQuads) {
     let rx, ry;
     if (q===1) { rx=cx; ry=cy-sr*1.05; }
     else if (q===2) { rx=cx-sr*1.05; ry=cy-sr*1.05; }
