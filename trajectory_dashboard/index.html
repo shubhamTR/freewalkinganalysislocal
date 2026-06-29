@@ -254,12 +254,10 @@ function drawArena(ctx, xc, yc, r, w, h, sq, label) {
   const probe = isProbeLabel(label || '');
   const isOM = label && label.startsWith('OM');
 
-  // Unsafe quadrants → light red (skip for OM cycles)
-  if (!isOM) {
-    for (const q of [1,2,3,4].filter(q => !sq.includes(q))) {
-      ctx.fillStyle = 'rgba(210,50,50,0.2)';
-      ctx.beginPath(); drawQuadRect(ctx, q, cx, cy, sr); ctx.fill();
-    }
+  // Unsafe quadrants → light red (OM gets all 4 at lighter shade since sq=[])
+  for (const q of [1,2,3,4].filter(q => !sq.includes(q))) {
+    ctx.fillStyle = isOM ? 'rgba(210,50,50,0.1)' : 'rgba(210,50,50,0.2)';
+    ctx.beginPath(); drawQuadRect(ctx, q, cx, cy, sr); ctx.fill();
   }
 
   // Arena circle
@@ -375,12 +373,10 @@ function drawDensity(ctx, xs, ys, xc, yc, r, w, h, sq, nBins, label) {
   const probe = isProbeLabel(label || '');
   const isOM = label && label.startsWith('OM');
 
-  // Unsafe quadrants → light red (skip for OM)
-  if (!isOM) {
-    for (const q of [1,2,3,4].filter(q => !sq.includes(q))) {
-      ctx.fillStyle = 'rgba(210,50,50,0.15)';
-      ctx.beginPath(); drawQuadRect(ctx, q, cx, cy, sr); ctx.fill();
-    }
+  // Unsafe quadrants → light red (OM gets all 4 at lighter shade since sq=[])
+  for (const q of [1,2,3,4].filter(q => !sq.includes(q))) {
+    ctx.fillStyle = isOM ? 'rgba(210,50,50,0.1)' : 'rgba(210,50,50,0.15)';
+    ctx.beginPath(); drawQuadRect(ctx, q, cx, cy, sr); ctx.fill();
   }
 
   // Draw density bins
@@ -775,16 +771,15 @@ document.getElementById('btn-save-svg').onclick = function() {
   const svgProbe = isProbeLabel(svgLabel0);
   const svgIsOM = svgLabel0.startsWith('OM');
 
-  // Unsafe quadrants → light red
-  if (!svgIsOM) {
-    for (const q of [1,2,3,4].filter(q => !sq.includes(q))) {
-      let rx, ry;
-      if (q===1) { rx=cx; ry=cy-sr*1.05; }
-      else if (q===2) { rx=cx-sr*1.05; ry=cy-sr*1.05; }
-      else if (q===3) { rx=cx-sr*1.05; ry=cy; }
-      else { rx=cx; ry=cy; }
-      svg += `<rect x="${rx}" y="${ry}" width="${sr*1.05}" height="${sr*1.05}" fill="rgba(210,50,50,0.2)"/>\n`;
-    }
+  // Unsafe quadrants → light red (OM gets all 4 at lighter shade)
+  for (const q of [1,2,3,4].filter(q => !sq.includes(q))) {
+    let rx, ry;
+    if (q===1) { rx=cx; ry=cy-sr*1.05; }
+    else if (q===2) { rx=cx-sr*1.05; ry=cy-sr*1.05; }
+    else if (q===3) { rx=cx-sr*1.05; ry=cy; }
+    else { rx=cx; ry=cy; }
+    const fill = svgIsOM ? 'rgba(210,50,50,0.1)' : 'rgba(210,50,50,0.2)';
+    svg += `<rect x="${rx}" y="${ry}" width="${sr*1.05}" height="${sr*1.05}" fill="${fill}"/>\n`;
   }
 
   // Arena circle
