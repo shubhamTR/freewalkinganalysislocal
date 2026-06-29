@@ -326,13 +326,9 @@ function drawTraj(ctx, xs, ys, xc, yc, a, col, lw) {
   }
 }
 
-// Density colormap: dark blue → mustard yellow (matches MATLAB pipeline)
+// Density colormap: cyan (low) → white (high)
 function densityColor(t) {
-  // t in [0,1]
-  const r = Math.round(255 * (0.1 + 0.8 * t));
-  const g = Math.round(255 * (0.1 + 0.65 * t));
-  const b = Math.round(255 * (0.4 - 0.3 * t));
-  return [r, g, b];
+  return [Math.round(255 * t), 255, 255];
 }
 
 function drawDensityColorbar() {
