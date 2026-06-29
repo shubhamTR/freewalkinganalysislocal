@@ -195,6 +195,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <script>
 const LTQ = [2,3,4,1];
+// Quadrant arc angle ranges [start, end] in canvas radians (0=right, clockwise)
+const Q_ARC = {1:[-Math.PI/2,0], 2:[-Math.PI,-Math.PI/2], 3:[Math.PI/2,Math.PI], 4:[0,Math.PI/2]};
+// Angle to the midpoint of each quadrant's arc (for label placement)
+const Q_LABEL_ANG = {1:-Math.PI/4, 2:-3*Math.PI/4, 3:3*Math.PI/4, 4:Math.PI/4};
 const cache = {};
 let S = {prot:null, exp:null, fi:0, sel:-1, data:null, view:'all', display:'trajectory'};
 // Muted, distinguishable palette (non-fluorescent) — cycles if >10 flies
@@ -238,24 +242,58 @@ function getVisibleCycles(e) {
   return vis;
 }
 
-function drawArena(ctx, xc, yc, r, w, h, sq) {
+function drawQuadRect(ctx, q, cx, cy, sr) {
+  if (q===1) ctx.rect(cx, cy-sr*1.05, sr*1.05, sr*1.05);
+  else if (q===2) ctx.rect(cx-sr*1.05, cy-sr*1.05, sr*1.05, sr*1.05);
+  else if (q===3) ctx.rect(cx-sr*1.05, cy, sr*1.05, sr*1.05);
+  else ctx.rect(cx, cy, sr*1.05, sr*1.05);
+}
+
+function drawArena(ctx, xc, yc, r, w, h, sq, label) {
   const sc = Math.min(w,h) / (r*2.2), cx = w/2, cy = h/2, sr = r*sc;
-  for (const q of sq) {
-    ctx.fillStyle = 'rgba(0,200,80,0.2)';
-    ctx.beginPath();
-    if (q===1) ctx.rect(cx, cy-sr*1.05, sr*1.05, sr*1.05);
-    else if (q===2) ctx.rect(cx-sr*1.05, cy-sr*1.05, sr*1.05, sr*1.05);
-    else if (q===3) ctx.rect(cx-sr*1.05, cy, sr*1.05, sr*1.05);
-    else ctx.rect(cx, cy, sr*1.05, sr*1.05);
-    ctx.fill();
+  const probe = isProbeLabel(label || '');
+  const isOM = label && label.startsWith('OM');
+
+  // Unsafe quadrants → light red (skip for OM cycles)
+  if (!isOM) {
+    for (const q of [1,2,3,4].filter(q => !sq.includes(q))) {
+      ctx.fillStyle = 'rgba(210,50,50,0.2)';
+      ctx.beginPath(); drawQuadRect(ctx, q, cx, cy, sr); ctx.fill();
+    }
   }
+
+  // Arena circle
   ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.arc(cx, cy, sr, 0, Math.PI*2); ctx.stroke();
+
+  // Crosshairs
   ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 0.5;
   ctx.setLineDash([3,3]); ctx.beginPath();
   ctx.moveTo(cx-sr, cy); ctx.lineTo(cx+sr, cy);
   ctx.moveTo(cx, cy-sr); ctx.lineTo(cx, cy+sr);
   ctx.stroke(); ctx.setLineDash([]);
+
+  // Green arc on outer boundary of safe quadrant — probe/preprobe only
+  if (probe && sq.length) {
+    for (const q of sq) {
+      const [a0, a1] = Q_ARC[q];
+      ctx.strokeStyle = 'rgba(0,220,80,0.9)';
+      ctx.lineWidth = Math.min(8, Math.max(2.5, sr * 0.035));
+      ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(cx, cy, sr * 1.04, a0, a1);
+      ctx.stroke(); ctx.lineCap = 'butt';
+    }
+  }
+
+  // Quadrant labels at arena border
+  const fs = Math.min(13, Math.max(7, Math.round(sr * 0.11)));
+  ctx.font = `bold ${fs}px sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let q = 1; q <= 4; q++) {
+    ctx.fillStyle = (probe && sq.includes(q)) ? 'rgba(0,220,80,0.85)' : 'rgba(255,255,255,0.4)';
+    ctx.fillText('Q'+q, cx + Math.cos(Q_LABEL_ANG[q])*sr*1.18, cy + Math.sin(Q_LABEL_ANG[q])*sr*1.18);
+  }
+
   return {cx, cy, sr, sc};
 }
 
@@ -329,21 +367,20 @@ function computeDensity(xs, ys, xc, yc, r, nBins) {
   return {grid, max: maxVal};
 }
 
-function drawDensity(ctx, xs, ys, xc, yc, r, w, h, sq, nBins) {
+function drawDensity(ctx, xs, ys, xc, yc, r, w, h, sq, nBins, label) {
   nBins = nBins || 24;
   const {grid, max} = computeDensity(xs, ys, xc, yc, r, nBins);
   const sc = Math.min(w,h) / (r*2.2), cx = w/2, cy = h/2, sr = r*sc;
   const step = (sr * 2) / nBins;
+  const probe = isProbeLabel(label || '');
+  const isOM = label && label.startsWith('OM');
 
-  // Draw safe zone shading first
-  for (const q of sq) {
-    ctx.fillStyle = 'rgba(0,200,80,0.15)';
-    ctx.beginPath();
-    if (q===1) ctx.rect(cx, cy-sr*1.05, sr*1.05, sr*1.05);
-    else if (q===2) ctx.rect(cx-sr*1.05, cy-sr*1.05, sr*1.05, sr*1.05);
-    else if (q===3) ctx.rect(cx-sr*1.05, cy, sr*1.05, sr*1.05);
-    else ctx.rect(cx, cy, sr*1.05, sr*1.05);
-    ctx.fill();
+  // Unsafe quadrants → light red (skip for OM)
+  if (!isOM) {
+    for (const q of [1,2,3,4].filter(q => !sq.includes(q))) {
+      ctx.fillStyle = 'rgba(210,50,50,0.15)';
+      ctx.beginPath(); drawQuadRect(ctx, q, cx, cy, sr); ctx.fill();
+    }
   }
 
   // Draw density bins
@@ -351,11 +388,9 @@ function drawDensity(ctx, xs, ys, xc, yc, r, w, h, sq, nBins) {
     for (let row = 0; row < nBins; row++) {
       for (let col = 0; col < nBins; col++) {
         if (grid[row][col] === 0) continue;
-        // Check if bin center is inside arena circle
         const bx = (col + 0.5) * step - sr;
         const by = (row + 0.5) * step - sr;
         if (bx*bx + by*by > sr*sr) continue;
-
         const t = grid[row][col] / max;
         const [cr, cg, cb] = densityColor(t);
         ctx.fillStyle = `rgba(${cr},${cg},${cb},${0.3 + 0.7*t})`;
@@ -372,6 +407,27 @@ function drawDensity(ctx, xs, ys, xc, yc, r, w, h, sq, nBins) {
   ctx.moveTo(cx-sr, cy); ctx.lineTo(cx+sr, cy);
   ctx.moveTo(cx, cy-sr); ctx.lineTo(cx, cy+sr);
   ctx.stroke(); ctx.setLineDash([]);
+
+  // Green arc on safe quadrant boundary — probe/preprobe only
+  if (probe && sq.length) {
+    for (const q of sq) {
+      const [a0, a1] = Q_ARC[q];
+      ctx.strokeStyle = 'rgba(0,220,80,0.9)';
+      ctx.lineWidth = Math.min(8, Math.max(2.5, sr * 0.035));
+      ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(cx, cy, sr * 1.04, a0, a1);
+      ctx.stroke(); ctx.lineCap = 'butt';
+    }
+  }
+
+  // Quadrant labels at arena border
+  const fs = Math.min(13, Math.max(7, Math.round(sr * 0.11)));
+  ctx.font = `bold ${fs}px sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let q = 1; q <= 4; q++) {
+    ctx.fillStyle = (probe && sq.includes(q)) ? 'rgba(0,220,80,0.85)' : 'rgba(255,255,255,0.4)';
+    ctx.fillText('Q'+q, cx + Math.cos(Q_LABEL_ANG[q])*sr*1.18, cy + Math.sin(Q_LABEL_ANG[q])*sr*1.18);
+  }
 }
 
 function updateLegend() {
@@ -464,9 +520,9 @@ function render() {
     ctx.fillStyle = '#1a1a1a'; ctx.fillRect(0,0,160,160);
     const c = fly.c[ci];
     if (S.display === 'density') {
-      if (c) drawDensity(ctx, c[0], c[1], e.xc, e.yc, e.r, 160, 160, sq, 20);
+      if (c) drawDensity(ctx, c[0], c[1], e.xc, e.yc, e.r, 160, 160, sq, 20, label);
     } else {
-      const ar = drawArena(ctx, e.xc, e.yc, e.r, 160, 160, sq);
+      const ar = drawArena(ctx, e.xc, e.yc, e.r, 160, 160, sq, label);
       if (c) drawTraj(ctx, c[0], c[1], e.xc, e.yc, ar, '#00d4ff', 1.2);
     }
   }
@@ -483,9 +539,9 @@ function openDetail(ci) {
   ctx.fillStyle = '#1a1a1a'; ctx.fillRect(0, 0, 600, 600);
   const tp = e.tp?.[ci], sq = safeQ(tp);
   if (S.display === 'density') {
-    if (c) drawDensity(ctx, c[0], c[1], e.xc, e.yc, e.r, 600, 600, sq, 40);
+    if (c) drawDensity(ctx, c[0], c[1], e.xc, e.yc, e.r, 600, 600, sq, 40, label);
   } else {
-    const ar = drawArena(ctx, e.xc, e.yc, e.r, 600, 600, sq);
+    const ar = drawArena(ctx, e.xc, e.yc, e.r, 600, 600, sq, label);
     if (c) drawTraj(ctx, c[0], c[1], e.xc, e.yc, ar, '#00d4ff', 2.5);
   }
 
@@ -667,9 +723,11 @@ function renderOverlayPreview() {
   }
 
   // Use first selected cycle's safe zones for arena drawing
-  const tp = e.tp?.[OV.cycles[0]];
+  const ci0 = OV.cycles[0];
+  const tp = e.tp?.[ci0];
   const sq = safeQ(tp);
-  const ar = drawArena(ctx, e.xc, e.yc, e.r, cv.width, cv.height, sq);
+  const label0 = e.lb?.[ci0] || ('C'+(ci0+1));
+  const ar = drawArena(ctx, e.xc, e.yc, e.r, cv.width, cv.height, sq, label0);
 
   // Draw each fly × cycle combination
   const lineStyles = [[], [8,4], [3,3]];  // solid, dashed, dotted per cycle
@@ -709,16 +767,24 @@ document.getElementById('btn-save-svg').onclick = function() {
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">\n`;
   svg += `<rect width="${W}" height="${H}" fill="#1a1a1a"/>\n`;
 
-  // Safe zone shading for first cycle
-  const tp = e.tp?.[OV.cycles[0]];
+  // Arena quadrant shading for first cycle
+  const svgCi0 = OV.cycles[0];
+  const tp = e.tp?.[svgCi0];
   const sq = safeQ(tp);
-  for (const q of sq) {
-    let rx, ry;
-    if (q === 1) { rx = cx; ry = cy - sr * 1.05; }
-    else if (q === 2) { rx = cx - sr * 1.05; ry = cy - sr * 1.05; }
-    else if (q === 3) { rx = cx - sr * 1.05; ry = cy; }
-    else { rx = cx; ry = cy; }
-    svg += `<rect x="${rx}" y="${ry}" width="${sr*1.05}" height="${sr*1.05}" fill="rgba(0,200,80,0.2)"/>\n`;
+  const svgLabel0 = e.lb?.[svgCi0] || ('C'+(svgCi0+1));
+  const svgProbe = isProbeLabel(svgLabel0);
+  const svgIsOM = svgLabel0.startsWith('OM');
+
+  // Unsafe quadrants → light red
+  if (!svgIsOM) {
+    for (const q of [1,2,3,4].filter(q => !sq.includes(q))) {
+      let rx, ry;
+      if (q===1) { rx=cx; ry=cy-sr*1.05; }
+      else if (q===2) { rx=cx-sr*1.05; ry=cy-sr*1.05; }
+      else if (q===3) { rx=cx-sr*1.05; ry=cy; }
+      else { rx=cx; ry=cy; }
+      svg += `<rect x="${rx}" y="${ry}" width="${sr*1.05}" height="${sr*1.05}" fill="rgba(210,50,50,0.2)"/>\n`;
+    }
   }
 
   // Arena circle
@@ -726,6 +792,25 @@ document.getElementById('btn-save-svg').onclick = function() {
   // Crosshairs
   svg += `<line x1="${cx-sr}" y1="${cy}" x2="${cx+sr}" y2="${cy}" stroke="rgba(255,255,255,0.12)" stroke-width="0.5" stroke-dasharray="3,3"/>\n`;
   svg += `<line x1="${cx}" y1="${cy-sr}" x2="${cx}" y2="${cy+sr}" stroke="rgba(255,255,255,0.12)" stroke-width="0.5" stroke-dasharray="3,3"/>\n`;
+
+  // Green arc on safe quadrant boundary — probe/preprobe only
+  if (svgProbe && sq.length) {
+    for (const q of sq) {
+      const [a0, a1] = Q_ARC[q];
+      const arcR = sr * 1.04;
+      const x0 = (cx + arcR * Math.cos(a0)).toFixed(1), y0 = (cy + arcR * Math.sin(a0)).toFixed(1);
+      const x1 = (cx + arcR * Math.cos(a1)).toFixed(1), y1 = (cy + arcR * Math.sin(a1)).toFixed(1);
+      svg += `<path d="M${x0},${y0} A${arcR.toFixed(1)},${arcR.toFixed(1)} 0 0,1 ${x1},${y1}" fill="none" stroke="rgba(0,220,80,0.9)" stroke-width="6" stroke-linecap="round"/>\n`;
+    }
+  }
+
+  // Quadrant labels
+  for (let q = 1; q <= 4; q++) {
+    const ang = Q_LABEL_ANG[q];
+    const lx = (cx + Math.cos(ang)*sr*1.18).toFixed(1), ly = (cy + Math.sin(ang)*sr*1.18).toFixed(1);
+    const col = (svgProbe && sq.includes(q)) ? 'rgba(0,220,80,0.85)' : 'rgba(255,255,255,0.4)';
+    svg += `<text x="${lx}" y="${ly}" fill="${col}" font-size="14" font-weight="bold" font-family="sans-serif" text-anchor="middle" dominant-baseline="middle">Q${q}</text>\n`;
+  }
 
   // Line dash patterns per cycle index
   const dashPatterns = ['', '8,4', '3,3'];
