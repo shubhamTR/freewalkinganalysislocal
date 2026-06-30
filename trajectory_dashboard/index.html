@@ -517,11 +517,10 @@ function updateLegend() {
   if (S.display === 'time') {
     const e = S.data?.[S.exp];
     const fps = e?.fps || 30.1;
-    // Use selected cycle if detail open, else first visible cycle of current fly
+    // Only use cycle-specific duration when a cycle is explicitly open (detail view)
     let nFrames = null;
-    if (e) {
-      const ci = S.sel >= 0 ? S.sel : getVisibleCycles(e)[0];
-      const c = e.flies?.[S.fi]?.c?.[ci];
+    if (e && S.sel >= 0) {
+      const c = e.flies?.[S.fi]?.c?.[S.sel];
       if (c) nFrames = c[0].length;
     }
     drawTimeColorbar(fps, nFrames);
