@@ -143,9 +143,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 <div class="legend" id="legend-time" style="display:none">
   <span style="font-size:11px;color:#888">Time:</span>
-  <canvas id="time-cbar" width="120" height="12" style="border-radius:2px"></canvas>
-  <span style="font-size:10px;color:#666">Start</span>
-  <span style="font-size:10px;color:#666">End</span>
+  <canvas id="time-cbar" width="150" height="24" style="border-radius:2px 2px 0 0"></canvas>
   <div class="sep" style="height:14px"></div>
   <span class="badge" style="background:#222;color:#ff6b6b">Training</span>
   <span class="badge" style="background:#222;color:#ffd700">Probe</span>
@@ -381,13 +379,35 @@ function drawTrajTime(ctx, xs, ys, xc, yc, ar, lw) {
   }
 }
 
-function drawTimeColorbar() {
+function drawTimeColorbar(fps, nFrames) {
   const cv = document.getElementById('time-cbar');
   if (!cv) return;
   const ctx = cv.getContext('2d');
-  for (let x = 0; x < 120; x++) {
-    ctx.fillStyle = timeColor(x / 119);
-    ctx.fillRect(x, 0, 1, 12);
+  const W = cv.width, barH = 12;
+  ctx.clearRect(0, 0, W, cv.height);
+
+  // Gradient bar
+  for (let x = 0; x < W; x++) {
+    ctx.fillStyle = timeColor(x / (W - 1));
+    ctx.fillRect(x, 0, 1, barH);
+  }
+
+  // Tick marks + second labels
+  fps = fps || 30.1;
+  const duration = nFrames ? nFrames / fps : 40;
+  const interval = duration <= 50 ? 10 : duration <= 120 ? 20 : 30;
+  ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 1;
+  ctx.fillStyle = 'rgba(200,200,200,0.85)';
+  ctx.font = '8px sans-serif'; ctx.textAlign = 'center';
+
+  const ticks = [];
+  for (let t = 0; t <= duration; t += interval) ticks.push(t);
+  if (ticks[ticks.length - 1] < duration - 1) ticks.push(Math.round(duration));
+
+  for (const t of ticks) {
+    const x = Math.round((t / duration) * (W - 1));
+    ctx.beginPath(); ctx.moveTo(x + 0.5, barH); ctx.lineTo(x + 0.5, barH + 4); ctx.stroke();
+    ctx.fillText(Math.round(t) + 's', Math.min(Math.max(x, 8), W - 8), cv.height - 1);
   }
 }
 
@@ -494,7 +514,18 @@ function updateLegend() {
   document.getElementById('legend-density').style.display = S.display === 'density' ? '' : 'none';
   document.getElementById('legend-time').style.display = S.display === 'time' ? '' : 'none';
   if (S.display === 'density') drawDensityColorbar();
-  if (S.display === 'time') drawTimeColorbar();
+  if (S.display === 'time') {
+    const e = S.data?.[S.exp];
+    const fps = e?.fps || 30.1;
+    // Use selected cycle if detail open, else first visible cycle of current fly
+    let nFrames = null;
+    if (e) {
+      const ci = S.sel >= 0 ? S.sel : getVisibleCycles(e)[0];
+      const c = e.flies?.[S.fi]?.c?.[ci];
+      if (c) nFrames = c[0].length;
+    }
+    drawTimeColorbar(fps, nFrames);
+  }
 }
 
 async function loadProtocol(prot) {

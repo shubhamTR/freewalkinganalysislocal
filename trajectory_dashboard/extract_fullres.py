@@ -289,6 +289,19 @@ def extract_experiment(exp_path, protocol):
         print(f"    SKIP {exp_name}: LED_detector has no cycles")
         return None
 
+    # --- Parse camera fps from metadata ---
+    fps = 30.1  # default
+    meta_file = os.path.join(exp_path, "original_metadata.txt")
+    if not os.path.isfile(meta_file):
+        meta_file = os.path.join(exp_path, "copy_metadata.txt")
+    if os.path.isfile(meta_file):
+        with open(meta_file, "r", errors="replace") as f:
+            for ln in f:
+                m = re.search(r"actual timestamps @ ([\d.]+) FPS", ln)
+                if m:
+                    fps = float(m.group(1))
+                    break
+
     # --- Parse metadata patterns ---
     led_patterns, training_patterns = parse_metadata_led_patterns(exp_path)
 
@@ -337,6 +350,7 @@ def extract_experiment(exp_path, protocol):
         "yc": round(yc, 1),
         "r": round(r, 1),
         "nc": nc,
+        "fps": fps,
         "lp": led_patterns,
         "tp": training_patterns,
         "lb": labels,

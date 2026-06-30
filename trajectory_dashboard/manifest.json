@@ -11,33 +11,33 @@
   },
   "P008": {
     "n_exp": 18,
-    "n_flies": 186,
-    "size_mb": 0
+    "n_flies": 210,
+    "size_mb": 165.2
   },
   "P010": {
-    "n_exp": 10,
-    "n_flies": 100,
-    "size_mb": 0
+    "n_exp": 11,
+    "n_flies": 128,
+    "size_mb": 100.7
   },
   "P011": {
-    "n_exp": 6,
-    "n_flies": 60,
-    "size_mb": 0
+    "n_exp": 9,
+    "n_flies": 106,
+    "size_mb": 83.5
   },
   "P013": {
     "n_exp": 5,
     "n_flies": 58,
-    "size_mb": 33.0
+    "size_mb": 32.9
   },
   "P014": {
-    "n_exp": 6,
-    "n_flies": 69,
-    "size_mb": 49.8
+    "n_exp": 8,
+    "n_flies": 91,
+    "size_mb": 57.8
   },
   "P015": {
     "n_exp": 8,
     "n_flies": 93,
-    "size_mb": 67.1
+    "size_mb": 67.0
   },
   "P016": {
     "n_exp": 4,
@@ -52,7 +52,7 @@
   "P019": {
     "n_exp": 5,
     "n_flies": 58,
-    "size_mb": 33.0
+    "size_mb": 32.9
   },
   "P023": {
     "n_exp": 7,
