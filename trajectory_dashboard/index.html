@@ -335,6 +335,27 @@ function drawTraj(ctx, xs, ys, xc, yc, a, col, lw) {
   }
 }
 
+// Draw 1-second post-LED-off ITI segment as a dim white dashed tail
+function drawITI(ctx, c, xc, yc, ar, lw) {
+  if (!c || !c[2] || c[2].length < 2) return;
+  const xs = c[2], ys = c[3];
+  const {cx, cy, sc} = ar;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+  ctx.lineWidth = Math.max(0.8, (lw || 1.5) * 0.6);
+  ctx.setLineDash([3, 4]);
+  ctx.globalAlpha = 1;
+  ctx.beginPath();
+  let started = false;
+  for (let i = 0; i < xs.length; i++) {
+    if (xs[i] == null || ys[i] == null) { started = false; continue; }
+    const px = cx + (xs[i]-xc)*sc, py = cy + (ys[i]-yc)*sc;
+    if (!started) { ctx.moveTo(px, py); started = true; } else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
 // Time colormap: violet (start) → green → orange (end), bright on dark background
 function timeColor(t) {
   return `hsl(${270 - t * 240}, 90%, 65%)`;
@@ -616,6 +637,7 @@ function render() {
       const ar = drawArena(ctx, e.xc, e.yc, e.r, 160, 160, sq, label);
       if (c && S.display === 'time') drawTrajTime(ctx, c[0], c[1], e.xc, e.yc, ar, 1.2);
       else if (c) drawTraj(ctx, c[0], c[1], e.xc, e.yc, ar, '#00d4ff', 1.2);
+      if (c) drawITI(ctx, c, e.xc, e.yc, ar, 1.2);
     }
   }
   updateLegend();
@@ -636,6 +658,7 @@ function openDetail(ci) {
     const ar = drawArena(ctx, e.xc, e.yc, e.r, 600, 600, sq, label);
     if (c && S.display === 'time') drawTrajTime(ctx, c[0], c[1], e.xc, e.yc, ar, 2.5);
     else if (c) drawTraj(ctx, c[0], c[1], e.xc, e.yc, ar, '#00d4ff', 2.5);
+    if (c) drawITI(ctx, c, e.xc, e.yc, ar, 2.5);
   }
 
   const lp = e.lp?.[ci] || '?';

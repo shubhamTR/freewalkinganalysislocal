@@ -12,91 +12,91 @@
   "P008": {
     "n_exp": 18,
     "n_flies": 210,
-    "size_mb": 165.2
+    "size_mb": 168.7
   },
   "P010": {
     "n_exp": 11,
     "n_flies": 128,
-    "size_mb": 100.7
+    "size_mb": 102.9
   },
   "P011": {
     "n_exp": 9,
     "n_flies": 106,
-    "size_mb": 83.5
+    "size_mb": 85.3
   },
   "P013": {
     "n_exp": 5,
     "n_flies": 58,
-    "size_mb": 32.9
+    "size_mb": 33.7
   },
   "P014": {
     "n_exp": 8,
     "n_flies": 91,
-    "size_mb": 57.8
+    "size_mb": 59.2
   },
   "P015": {
     "n_exp": 8,
     "n_flies": 93,
-    "size_mb": 67.0
+    "size_mb": 68.6
   },
   "P016": {
     "n_exp": 4,
     "n_flies": 46,
-    "size_mb": 33.1
+    "size_mb": 33.9
   },
   "P017": {
     "n_exp": 6,
     "n_flies": 66,
-    "size_mb": 30.8
+    "size_mb": 31.5
   },
   "P019": {
     "n_exp": 5,
     "n_flies": 58,
-    "size_mb": 32.9
+    "size_mb": 33.7
   },
   "P023": {
     "n_exp": 7,
     "n_flies": 82,
-    "size_mb": 46.5
+    "size_mb": 47.6
   },
   "P024": {
     "n_exp": 9,
     "n_flies": 97,
-    "size_mb": 54.8
+    "size_mb": 56.1
   },
   "P025": {
     "n_exp": 9,
     "n_flies": 104,
-    "size_mb": 42.7
+    "size_mb": 43.7
   },
   "P026": {
     "n_exp": 7,
     "n_flies": 82,
-    "size_mb": 46.0
+    "size_mb": 47.0
   },
   "P027": {
     "n_exp": 7,
     "n_flies": 78,
-    "size_mb": 32.2
+    "size_mb": 32.9
   },
   "P029": {
     "n_exp": 7,
     "n_flies": 84,
-    "size_mb": 34.2
+    "size_mb": 35.0
   },
   "P030": {
     "n_exp": 7,
     "n_flies": 81,
-    "size_mb": 33.3
+    "size_mb": 34.0
   },
   "P031": {
     "n_exp": 4,
     "n_flies": 47,
-    "size_mb": 19.1
+    "size_mb": 19.5
   },
   "P032": {
     "n_exp": 5,
     "n_flies": 56,
-    "size_mb": 22.9
+    "size_mb": 23.4
   }
 }

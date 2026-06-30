@@ -321,6 +321,8 @@ def extract_experiment(exp_path, protocol):
         y_all = all_fly_y[fi]
         first_frame = all_first_frame[fi]
 
+        iti_frames = max(1, int(round(fps)))  # ~1 second post-LED-off
+
         cycles = []
         for ci in range(nc):
             f_start = int(on_times[ci]) - first_frame
@@ -332,7 +334,7 @@ def extract_experiment(exp_path, protocol):
                 f_end = len(x_all)
 
             if f_start >= f_end or f_start >= len(x_all):
-                cycles.append([[], []])
+                cycles.append([[], [], [], []])
                 continue
 
             xc_fly = np.round(x_all[f_start:f_end], 1)
@@ -341,7 +343,18 @@ def extract_experiment(exp_path, protocol):
             xc_list = [None if np.isnan(v) else v for v in xc_fly.tolist()]
             yc_list = [None if np.isnan(v) else v for v in yc_fly.tolist()]
 
-            cycles.append([xc_list, yc_list])
+            # 1-second ITI: from LED off to LED off + 1s
+            iti_start = int(off_times[ci]) - first_frame
+            iti_end = min(iti_start + iti_frames, len(x_all))
+            if iti_start >= 0 and iti_start < len(x_all):
+                ix = np.round(x_all[iti_start:iti_end], 1)
+                iy = np.round(y_all[iti_start:iti_end], 1)
+                ixt = [None if np.isnan(v) else v for v in ix.tolist()]
+                iyt = [None if np.isnan(v) else v for v in iy.tolist()]
+            else:
+                ixt, iyt = [], []
+
+            cycles.append([xc_list, yc_list, ixt, iyt])
 
         flies.append({"i": fi + 1, "c": cycles})
 
