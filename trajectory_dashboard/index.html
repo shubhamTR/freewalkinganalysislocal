@@ -305,6 +305,24 @@ function drawArena(ctx, xc, yc, r, w, h, sq, label) {
   return {cx, cy, sr, sc};
 }
 
+function drawGaps(ctx, xs, ys, xc, yc, a, lw) {
+  // Draw black lines bridging NaN tracking gaps
+  const {cx, cy, sc} = a;
+  ctx.save();
+  ctx.strokeStyle = '#000'; ctx.lineWidth = Math.max(0.8, (lw||1.5)*0.8);
+  ctx.globalAlpha = 0.9;
+  let lastPx = null, lastPy = null, inGap = false;
+  for (let i = 0; i < xs.length; i++) {
+    if (xs[i] == null || ys[i] == null) { inGap = true; continue; }
+    const px = cx + (xs[i]-xc)*sc, py = cy + (ys[i]-yc)*sc;
+    if (inGap && lastPx != null) {
+      ctx.beginPath(); ctx.moveTo(lastPx, lastPy); ctx.lineTo(px, py); ctx.stroke();
+    }
+    lastPx = px; lastPy = py; inGap = false;
+  }
+  ctx.restore();
+}
+
 function drawTraj(ctx, xs, ys, xc, yc, a, col, lw) {
   if (!xs || xs.length < 2) return;
   const {cx, cy, sc} = a;
@@ -317,6 +335,7 @@ function drawTraj(ctx, xs, ys, xc, yc, a, col, lw) {
     if (!started) { ctx.moveTo(px,py); started = true; } else ctx.lineTo(px,py);
   }
   ctx.stroke(); ctx.globalAlpha = 1;
+  drawGaps(ctx, xs, ys, xc, yc, a, lw);
 
   // Start marker
   if (xs[0] != null) {
@@ -382,6 +401,7 @@ function drawTrajTime(ctx, xs, ys, xc, yc, ar, lw) {
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
+  drawGaps(ctx, xs, ys, xc, yc, ar, lw);
   // Start dot (violet)
   if (xs[0] != null) {
     const sx = cx+(xs[0]-xc)*sc, sy = cy+(ys[0]-yc)*sc;
