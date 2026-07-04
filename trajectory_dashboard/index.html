@@ -747,6 +747,30 @@ function populateOverlay() {
     flyDiv.appendChild(chip);
   });
 
+  // "All" button
+  const allBtn = document.createElement('span');
+  allBtn.className = 'fly-chip';
+  allBtn.style.cssText = 'border-color:#888;color:#ccc;font-style:italic;';
+  allBtn.appendChild(document.createTextNode('All'));
+  allBtn.onclick = () => {
+    const allFis = e.flies.map((_, fi) => fi);
+    const allSelected = allFis.every(fi => OV.flies.includes(fi));
+    if (allSelected) {
+      OV.flies = [];
+    } else {
+      OV.flies = [...allFis];
+    }
+    document.querySelectorAll('#ov-fly-list .fly-chip').forEach(chip => {
+      if (!chip.dataset.fi) return;
+      const cfi = parseInt(chip.dataset.fi);
+      const oi = OV.flies.indexOf(cfi);
+      if (oi >= 0) { chip.classList.add('picked'); chip.style.setProperty('--fc', ovColor(oi)); }
+      else { chip.classList.remove('picked'); chip.style.removeProperty('--fc'); }
+    });
+    renderOverlayPreview();
+  };
+  flyDiv.appendChild(allBtn);
+
   // Cycle chips
   const cyDiv = document.getElementById('ov-cycle-list');
   cyDiv.innerHTML = '';
