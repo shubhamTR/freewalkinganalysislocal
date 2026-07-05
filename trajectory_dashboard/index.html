@@ -575,7 +575,7 @@ async function loadProtocol(prot) {
   document.getElementById('grid-wrap').style.display = 'none';
 
   try {
-    const resp = await fetch(`${prot}.json`);
+    const resp = await fetch(`${prot}.json?v=${Date.now()}`);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
     cache[prot] = data;
