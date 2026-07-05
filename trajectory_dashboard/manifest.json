@@ -65,9 +65,9 @@
     "size_mb": 56.1
   },
   "P025": {
-    "n_exp": 9,
-    "n_flies": 104,
-    "size_mb": 43.7
+    "n_exp": 12,
+    "n_flies": 135,
+    "size_mb": 56.6
   },
   "P026": {
     "n_exp": 7,
@@ -75,9 +75,9 @@
     "size_mb": 47.0
   },
   "P027": {
-    "n_exp": 7,
-    "n_flies": 78,
-    "size_mb": 32.9
+    "n_exp": 10,
+    "n_flies": 114,
+    "size_mb": 48.1
   },
   "P029": {
     "n_exp": 7,
