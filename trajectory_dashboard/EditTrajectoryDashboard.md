@@ -106,6 +106,7 @@ git push origin dev
 | `SKIP <exp>: LED_detector has no cycles` | Empty LED timing data | Check LED detector output for that experiment |
 | `P033: directory not found` | Wrong protocol name or folder missing | Check spelling and confirm folder exists in `analysisdatalocal/` |
 | Preprobe/probe shows no safe zone (green arc missing) | `original_metadata.txt` missing or unparseable | Check that the metadata file exists and contains a `Randomized Orientation Log` section |
+| New experiments not appearing in dropdown after re-extraction | Browser has cached the old `P*.json` | The dashboard appends `?v=timestamp` to every JSON fetch to bypass this automatically — just open a fresh tab at `http://localhost:8000` |
 
 ---
 
