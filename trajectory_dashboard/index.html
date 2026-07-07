@@ -95,6 +95,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <option value="P030">P030</option>
       <option value="P031">P031</option>
       <option value="P032">P032</option>
+      <option value="P033">P033</option>
+      <option value="P034">P034</option>
     </select>
   </div>
   <div class="sep"></div>
@@ -208,6 +210,107 @@ const LTQ = [2,3,4,1];
 const Q_ARC = {1:[-Math.PI/2,0], 2:[-Math.PI,-Math.PI/2], 3:[Math.PI/2,Math.PI], 4:[0,Math.PI/2]};
 // Angle to the midpoint of each quadrant's arc (for label placement)
 const Q_LABEL_ANG = {1:-Math.PI/4, 2:-3*Math.PI/4, 3:3*Math.PI/4, 4:Math.PI/4};
+
+// --- Visual-scene inset ("what the fly sees at the safe zone") ---------
+// SBD-family protocol classification -- mirrors
+// freewalkinganalysislocal/get_sbd_protocol_class.m (MATLAB is the source
+// of truth; keep in sync). Only coupled/decoupled protocols carry an "ao"
+// (arena_ori) field in their JSON -- featureless protocols need no extra
+// data at all (the panel is a uniform fill regardless of orientation), so
+// their inset is driven purely by `lb` (Ag = blank, everything else =
+// all-on), same logic tester_visual_landmark_qc.m uses.
+const SBD_CLASS = {P025:'coupled', P026:'coupled', P027:'decoupled', P029:'decoupled', P030:'decoupled', P031:'featureless', P032:'featureless'};
+// Physical quadrant boundaries (fixed display columns, independent of
+// orientation) -- back-solved from a real P025 arena photo, see memory
+// notes / tester_visual_landmark_qc.m header for the derivation.
+const Q_BOUNDS = {1:[153.5,201.5], 2:[105.5,153.5], 3:[57.5,105.5], 4:[9.5,57.5]};
+
+function circshiftRow(row, shift) {
+  const n = row.length;
+  const s = ((shift % n) + n) % n;
+  return row.slice(n - s).concat(row.slice(0, n - s));
+}
+
+function buildSBDPattern() {
+  // Port of freewalkinganalysislocal/build_sbd_pattern.m -- bars+stripes+
+  // diagonal 32x192 base pattern (0/1), identical for every coupled/
+  // decoupled SBD protocol. Computed once at page load.
+  const H = 32, SEC = 64;
+  const barsRow = new Array(SEC);
+  for (let c = 0; c < SEC; c++) barsRow[c] = (Math.floor(c / 8) % 2 === 0) ? 1 : 0;
+  const bars = [], stripes = [], diagonal = [];
+  for (let r = 0; r < H; r++) {
+    bars.push(barsRow.slice());
+    const sVal = (Math.floor(r / 8) % 2 === 0) ? 1 : 0;
+    stripes.push(new Array(SEC).fill(sVal));
+    diagonal.push(circshiftRow(barsRow, r + 1));
+  }
+  const combined = [];
+  for (let r = 0; r < H; r++) combined.push(bars[r].concat(stripes[r], diagonal[r]));
+  return combined.map(row => circshiftRow(row, -27));  // 32 x 192
+}
+const SBD_PAT = buildSBDPattern();
+
+function getSafeZoneCrop(arenaOri, safeQuad) {
+  // Returns a 32 x 48 array (0/1) -- the visual content at safeQuad's
+  // fixed column window, for the panorama shifted by arenaOri*48.
+  const shiftPx = arenaOri * 48;
+  const w = Q_BOUNDS[safeQuad];
+  const c0 = Math.round(w[0]), c1 = Math.round(w[1]);
+  const cols = [];
+  for (let c = c0; c < c1; c++) cols.push(((c - shiftPx) % 192 + 192) % 192);
+  return SBD_PAT.map(row => cols.map(c => row[c]));
+}
+
+function drawVisualSceneInset(ctx, ar, protocol, label, tp, arenaOri) {
+  const pclass = SBD_CLASS[protocol];
+  if (!pclass) return;                          // not an SBD-family protocol
+  if (!label || label === 'Ag' || label.startsWith('OM')) return;  // no landmark on Ag/OM in ANY class -- panel is blank/grating, nothing to show
+
+  // Top-right corner -- clear of the .lbl cycle-label badge (top-left) and
+  // .sq safe-quad badge (bottom-right); quadrant number labels no longer
+  // render per-cycle (Ag-only now, see drawArena), so no clash there either.
+  const {cx, cy, sr} = ar;
+  const iw = sr * 0.3, ih = iw * (32 / 48);
+  const x0 = cx + sr * 1.08 - iw, y0 = cy - sr * 1.08;
+
+  if (pclass === 'featureless') {
+    // No orientation concept at all -- uniform all-on (white) panel for every trial cycle.
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x0, y0, iw, ih);
+    ctx.strokeStyle = 'rgba(255,220,0,0.9)'; ctx.lineWidth = 1;
+    ctx.strokeRect(x0, y0, iw, ih);
+    return;
+  }
+
+  if (arenaOri == null) return;                  // no logged orientation (shouldn't happen off Ag/OM)
+  const sq = safeQ(tp);
+  if (sq.length !== 1) return;                   // not a resolvable single-quadrant pattern
+
+  const crop = getSafeZoneCrop(arenaOri, sq[0]);  // 32 x 48, values 0/1
+  const cw = crop[0].length, chh = crop.length;
+
+  // Rasterize to an offscreen canvas at native crop resolution, then
+  // drawImage (smoothing off) to scale up crisply into the inset region.
+  const off = document.createElement('canvas');
+  off.width = cw; off.height = chh;
+  const octx = off.getContext('2d');
+  const img = octx.createImageData(cw, chh);
+  for (let r = 0; r < chh; r++) {
+    for (let c = 0; c < cw; c++) {
+      const v = crop[r][c] ? 255 : 0;
+      const idx = (r * cw + c) * 4;
+      img.data[idx] = v; img.data[idx+1] = v; img.data[idx+2] = v; img.data[idx+3] = 255;
+    }
+  }
+  octx.putImageData(img, 0, 0);
+
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(off, x0, y0, iw, ih);
+  ctx.imageSmoothingEnabled = true;
+  ctx.strokeStyle = 'rgba(255,220,0,0.9)'; ctx.lineWidth = 1;
+  ctx.strokeRect(x0, y0, iw, ih);
+}
 const cache = {};
 let S = {prot:null, exp:null, fi:0, sel:-1, data:null, view:'all', display:'trajectory'};
 // Muted, distinguishable palette (non-fluorescent) — cycles if >10 flies
@@ -293,13 +396,18 @@ function drawArena(ctx, xc, yc, r, w, h, sq, label) {
     }
   }
 
-  // Quadrant labels at arena border
-  const fs = Math.min(13, Math.max(7, Math.round(sr * 0.11)));
-  ctx.font = `bold ${fs}px sans-serif`;
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  for (let q = 1; q <= 4; q++) {
-    ctx.fillStyle = (probe && sq.includes(q)) ? 'rgba(0,220,80,0.85)' : 'rgba(255,255,255,0.4)';
-    ctx.fillText('Q'+q, cx + Math.cos(Q_LABEL_ANG[q])*sr*1.18, cy + Math.sin(Q_LABEL_ANG[q])*sr*1.18);
+  // Quadrant number labels -- shown ONCE, on the Ag panel only, as a
+  // standing reference for which corner is Q1/Q2/Q3/Q4. Every other cycle
+  // omits them (safe quadrant is still conveyed by the shading/green arc
+  // above) to cut clutter and leave the corners free for the visual-scene inset.
+  if (label === 'Ag') {
+    const fs = Math.min(13, Math.max(7, Math.round(sr * 0.11)));
+    ctx.font = `bold ${fs}px sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (let q = 1; q <= 4; q++) {
+      ctx.fillStyle = (probe && sq.includes(q)) ? 'rgba(0,220,80,0.85)' : 'rgba(255,255,255,0.4)';
+      ctx.fillText('Q'+q, cx + Math.cos(Q_LABEL_ANG[q])*sr*1.18, cy + Math.sin(Q_LABEL_ANG[q])*sr*1.18);
+    }
   }
 
   return {cx, cy, sr, sc};
@@ -539,13 +647,18 @@ function drawDensity(ctx, xs, ys, xc, yc, r, w, h, sq, nBins, label) {
     }
   }
 
-  // Quadrant labels at arena border
-  const fs = Math.min(13, Math.max(7, Math.round(sr * 0.11)));
-  ctx.font = `bold ${fs}px sans-serif`;
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  for (let q = 1; q <= 4; q++) {
-    ctx.fillStyle = (probe && sq.includes(q)) ? 'rgba(0,220,80,0.85)' : 'rgba(255,255,255,0.4)';
-    ctx.fillText('Q'+q, cx + Math.cos(Q_LABEL_ANG[q])*sr*1.18, cy + Math.sin(Q_LABEL_ANG[q])*sr*1.18);
+  // Quadrant number labels -- shown ONCE, on the Ag panel only, as a
+  // standing reference for which corner is Q1/Q2/Q3/Q4. Every other cycle
+  // omits them (safe quadrant is still conveyed by the shading/green arc
+  // above) to cut clutter and leave the corners free for the visual-scene inset.
+  if (label === 'Ag') {
+    const fs = Math.min(13, Math.max(7, Math.round(sr * 0.11)));
+    ctx.font = `bold ${fs}px sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (let q = 1; q <= 4; q++) {
+      ctx.fillStyle = (probe && sq.includes(q)) ? 'rgba(0,220,80,0.85)' : 'rgba(255,255,255,0.4)';
+      ctx.fillText('Q'+q, cx + Math.cos(Q_LABEL_ANG[q])*sr*1.18, cy + Math.sin(Q_LABEL_ANG[q])*sr*1.18);
+    }
   }
 }
 
@@ -616,7 +729,7 @@ function render() {
   const viewLabel = S.view === 'probes' ? `${nVis} probes` : `${nc} cycles`;
   document.getElementById('info').textContent = `${viewLabel} | ${nf} flies | Fly ${fly.i}`;
 
-  const cols = nVis<=5?nVis : nVis<=12?4 : nVis<=24?6 : nVis<=37?8 : 10;
+  const cols = nVis<=5?nVis : nVis<=12?4 : nVis<=20?5 : nVis<=30?6 : nVis<=42?7 : 8;
   const g = document.getElementById('grid');
   g.style.gridTemplateColumns = `repeat(${cols},1fr)`;
   g.innerHTML = '';
@@ -629,7 +742,7 @@ function render() {
     tile.className = 'tile' + (ci===S.sel?' selected':'');
 
     const cv = document.createElement('canvas');
-    cv.width = 160; cv.height = 160;
+    cv.width = 220; cv.height = 220;
     tile.appendChild(cv);
 
     const lb = document.createElement('div'); lb.className = 'lbl';
@@ -648,15 +761,16 @@ function render() {
     g.appendChild(tile);
 
     const ctx = cv.getContext('2d');
-    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(0,0,160,160);
+    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(0,0,220,220);
     const c = fly.c[ci];
     if (S.display === 'density') {
-      if (c) drawDensity(ctx, c[0], c[1], e.xc, e.yc, e.r, 160, 160, sq, 20, label);
+      if (c) drawDensity(ctx, c[0], c[1], e.xc, e.yc, e.r, 220, 220, sq, 20, label);
     } else {
-      const ar = drawArena(ctx, e.xc, e.yc, e.r, 160, 160, sq, label);
+      const ar = drawArena(ctx, e.xc, e.yc, e.r, 220, 220, sq, label);
       if (c && S.display === 'time') drawTrajTime(ctx, c[0], c[1], e.xc, e.yc, ar, 1.2);
       else if (c) drawTraj(ctx, c[0], c[1], e.xc, e.yc, ar, '#00d4ff', 1.2);
       if (c) drawITI(ctx, c, e.xc, e.yc, ar, 1.2);
+      drawVisualSceneInset(ctx, ar, S.prot, label, tp, e.ao?.[ci]);
     }
   }
   updateLegend();
@@ -678,6 +792,7 @@ function openDetail(ci) {
     if (c && S.display === 'time') drawTrajTime(ctx, c[0], c[1], e.xc, e.yc, ar, 2.5);
     else if (c) drawTraj(ctx, c[0], c[1], e.xc, e.yc, ar, '#00d4ff', 2.5);
     if (c) drawITI(ctx, c, e.xc, e.yc, ar, 2.5);
+    drawVisualSceneInset(ctx, ar, S.prot, label, tp, e.ao?.[ci]);
   }
 
   const lp = e.lp?.[ci] || '?';

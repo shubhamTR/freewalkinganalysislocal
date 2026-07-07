@@ -98,5 +98,15 @@
     "n_exp": 5,
     "n_flies": 56,
     "size_mb": 23.4
+  },
+  "P033": {
+    "n_exp": 5,
+    "n_flies": 57,
+    "size_mb": 32.7
+  },
+  "P034": {
+    "n_exp": 5,
+    "n_flies": 56,
+    "size_mb": 32.2
   }
 }
