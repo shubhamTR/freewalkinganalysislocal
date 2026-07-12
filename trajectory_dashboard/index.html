@@ -220,9 +220,20 @@ const Q_LABEL_ANG = {1:-Math.PI/4, 2:-3*Math.PI/4, 3:3*Math.PI/4, 4:Math.PI/4};
 // their inset is driven purely by `lb` (Ag = blank, everything else =
 // all-on), same logic tester_visual_landmark_qc.m uses.
 const SBD_CLASS = {P025:'coupled', P026:'coupled', P027:'decoupled', P029:'decoupled', P030:'decoupled', P031:'featureless', P032:'featureless'};
+// SlashCirc-family classification -- a SECOND, structurally different
+// visual pattern (see buildSlashCircPattern below / build_slashcirc_pattern.m)
+// used only by P033/P034. Diagonal-PAIR LED scheme (safeQ(tp) returns 2
+// quadrants at once for this family, not 1). Mirrors
+// get_slashcirc_protocol_class.m -- keep in sync.
+//   coupled: P033 -- same mechanism as SBD's coupled
+//   frozen:  P034 -- visual shift is a CONSTANT for the whole experiment
+//            (still uses the "ao" field -- see extract_fullres.py's
+//            parse_slashcirc_orientations, which repeats the constant)
+const SLASHCIRC_CLASS = {P033:'coupled', P034:'frozen'};
 // Physical quadrant boundaries (fixed display columns, independent of
 // orientation) -- back-solved from a real P025 arena photo, see memory
-// notes / tester_visual_landmark_qc.m header for the derivation.
+// notes / tester_visual_landmark_qc.m header for the derivation. Verified
+// to transfer unmodified to the SlashCirc family (same rig/panel mounting).
 const Q_BOUNDS = {1:[153.5,201.5], 2:[105.5,153.5], 3:[57.5,105.5], 4:[9.5,57.5]};
 
 function circshiftRow(row, shift) {
@@ -251,6 +262,37 @@ function buildSBDPattern() {
 }
 const SBD_PAT = buildSBDPattern();
 
+// SlashCirc base tile isn't a closed-form pattern like SBD's (it's real
+// pixel data from slashcirc.csv) -- fetched once at page load into
+// SLASHCIRC_PAT. drawVisualSceneInset checks for null and skips the inset
+// gracefully if a SlashCirc protocol is selected before this resolves (a
+// ~6KB local fetch -- effectively instant, but never assumed synchronous).
+let SLASHCIRC_PAT = null;
+function buildSlashCircPattern(tile) {
+  // Port of freewalkinganalysislocal/build_slashcirc_pattern.m -- tile is
+  // the 32x96 0/1 grid from slashcirc_pattern.json (same source as
+  // slashcirc.csv, truncated to the first 32x96 the .m scripts use).
+  // slash_tile = cols 0-47, oval_tile = cols 48-95 ->
+  // [slash,oval,slash,oval] (32x192), then circshift [7,6].
+  const H = 32, T = 48;
+  const slash = tile.map(row => row.slice(0, T));
+  const oval  = tile.map(row => row.slice(T, 2 * T));
+  const combined = [];
+  for (let r = 0; r < H; r++) combined.push(slash[r].concat(oval[r], slash[r], oval[r]));
+  const rowShifted = [];
+  for (let r = 0; r < H; r++) rowShifted.push(combined[((r - 7) % H + H) % H]);
+  return rowShifted.map(row => circshiftRow(row, 6));  // 32 x 192
+}
+(async function loadSlashCircPattern() {
+  try {
+    const resp = await fetch(`slashcirc_pattern.json?v=1`);
+    const tile = await resp.json();
+    SLASHCIRC_PAT = buildSlashCircPattern(tile);
+  } catch (e) {
+    console.error('Failed to load slashcirc_pattern.json', e);
+  }
+})();
+
 function getSafeZoneCrop(arenaOri, safeQuad) {
   // Returns a 32 x 48 array (0/1) -- the visual content at safeQuad's
   // fixed column window, for the panorama shifted by arenaOri*48.
@@ -262,9 +304,24 @@ function getSafeZoneCrop(arenaOri, safeQuad) {
   return SBD_PAT.map(row => cols.map(c => row[c]));
 }
 
+function getSlashCircCrop(arenaOri, safeQuad) {
+  // Returns a 32 x 48 array, values pre-inverted to the SAME "1=bright"
+  // convention as getSafeZoneCrop -- SlashCirc's actual display is
+  // INVERTED (Brightness - pat*Brightness, see build_slashcirc_pattern.m),
+  // so this returns 1-rawPattern to let drawVisualSceneInset rasterize
+  // both families with identical code.
+  const shiftPx = arenaOri * 48;
+  const w = Q_BOUNDS[safeQuad];
+  const c0 = Math.round(w[0]), c1 = Math.round(w[1]);
+  const cols = [];
+  for (let c = c0; c < c1; c++) cols.push(((c - shiftPx) % 192 + 192) % 192);
+  return SLASHCIRC_PAT.map(row => cols.map(c => 1 - row[c]));
+}
+
 function drawVisualSceneInset(ctx, ar, protocol, label, tp, arenaOri) {
-  const pclass = SBD_CLASS[protocol];
-  if (!pclass) return;                          // not an SBD-family protocol
+  const sbdClass = SBD_CLASS[protocol];
+  const scClass  = SLASHCIRC_CLASS[protocol];
+  if (!sbdClass && !scClass) return;             // not in either visual-pattern family
   if (!label || label === 'Ag' || label.startsWith('OM')) return;  // no landmark on Ag/OM in ANY class -- panel is blank/grating, nothing to show
 
   // Top-right corner -- clear of the .lbl cycle-label badge (top-left) and
@@ -274,7 +331,7 @@ function drawVisualSceneInset(ctx, ar, protocol, label, tp, arenaOri) {
   const iw = sr * 0.3, ih = iw * (32 / 48);
   const x0 = cx + sr * 1.08 - iw, y0 = cy - sr * 1.08;
 
-  if (pclass === 'featureless') {
+  if (sbdClass === 'featureless') {
     // No orientation concept at all -- uniform all-on (white) panel for every trial cycle.
     ctx.fillStyle = '#fff';
     ctx.fillRect(x0, y0, iw, ih);
@@ -285,9 +342,15 @@ function drawVisualSceneInset(ctx, ar, protocol, label, tp, arenaOri) {
 
   if (arenaOri == null) return;                  // no logged orientation (shouldn't happen off Ag/OM)
   const sq = safeQ(tp);
-  if (sq.length !== 1) return;                   // not a resolvable single-quadrant pattern
 
-  const crop = getSafeZoneCrop(arenaOri, sq[0]);  // 32 x 48, values 0/1
+  let crop;
+  if (sbdClass) {
+    if (sq.length !== 1) return;                 // not a resolvable single-quadrant pattern
+    crop = getSafeZoneCrop(arenaOri, sq[0]);
+  } else {
+    if (sq.length !== 2 || !SLASHCIRC_PAT) return;  // diagonal-pair pattern not resolvable yet/at all
+    crop = getSlashCircCrop(arenaOri, sq[0]);       // pair members are pixel-identical (96px = 1 period apart) -- either quadrant works
+  }
   const cw = crop[0].length, chh = crop.length;
 
   // Rasterize to an offscreen canvas at native crop resolution, then

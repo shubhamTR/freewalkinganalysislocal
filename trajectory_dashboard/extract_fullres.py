@@ -31,6 +31,29 @@ import scipy.io as sio
 DEFAULT_ANALYSIS_DIR = "/Users/rathores/Documents/analysisdatalocal"
 SCRIPT_DIR = Path(__file__).resolve().parent  # trajectory_dashboard/
 
+# SBD-family protocol classification -- mirrors
+# freewalkinganalysislocal/get_sbd_protocol_class.m (MATLAB is the source of
+# truth; keep these two in sync if the family grows).
+#   coupled:     single `ori` drives both LED-safe quadrant and panorama shift
+#   decoupled:   independent `led_ori` (safe) / `arena_ori` (visual)
+#   featureless: uniform all-on panel, no landmark ever -- not included here,
+#                since the dashboard needs no per-cycle orientation data for it
+SBD_CLASS = {
+    "P025": "coupled", "P026": "coupled",
+    "P027": "decoupled", "P029": "decoupled", "P030": "decoupled",
+}
+
+# SlashCirc-family protocol classification -- a SECOND, structurally
+# different visual pattern (see index.html's buildSlashCircPattern / MATLAB
+# build_slashcirc_pattern.m) used only by P033/P034. Diagonal-PAIR LED
+# scheme (two safe quadrants at once), not single-quadrant like SBD.
+#   coupled: P033 -- same mechanism as SBD's coupled (single `ori` drives
+#            both LED-safe quadrant pair and panorama shift)
+#   frozen:  P034 -- a THIRD coupling behavior: `frozen_visual_ori` is
+#            fixed once at experiment start; `ori` (LED-safe pair) still
+#            varies per trial but the visual shift does not
+SLASHCIRC_CLASS = {"P033": "coupled", "P034": "frozen"}
+
 
 def load_mat_v5(path):
     """Load a v5 .mat file. Returns dict or raises NotImplementedError for v7.3."""
@@ -176,8 +199,10 @@ def parse_metadata_led_patterns(exp_path):
 
         for li in range(sched_start, len(lines)):
             ln = lines[li].strip()
-            if not ln or ln.startswith("==="):
+            if ln.startswith("==="):
                 break
+            if not ln:
+                continue
 
             led_match = re.search(r"LED=(\d{4})", ln)
             if not led_match:
@@ -202,6 +227,133 @@ def parse_metadata_led_patterns(exp_path):
             training_patterns.append("1111")
 
     return led_patterns, training_patterns
+
+
+def parse_arena_orientations(exp_path, protocol):
+    """
+    Per-cycle "visual orientation" (arena_ori) for SBD-family protocols, so
+    the dashboard can reconstruct which slice of the SBD panorama was
+    actually on screen (the `tp` LED-pattern field alone isn't enough for
+    decoupled protocols, since arena_ori is independent of the LED-safe
+    orientation there). Mirrors get_cycle_visual_scenes.m's per-line parsing.
+
+    Returns a list aligned to `nc` (OM1/OM2 padded with None to match
+    led_patterns/training_patterns), or None if this protocol isn't in
+    SBD_CLASS (featureless protocols never need this -- no landmark ever)
+    or the metadata can't be read/parsed.
+    """
+    pclass = SBD_CLASS.get(protocol)
+    if pclass is None:
+        return None
+
+    meta_file = os.path.join(exp_path, "original_metadata.txt")
+    if not os.path.isfile(meta_file):
+        meta_file = os.path.join(exp_path, "copy_metadata.txt")
+    if not os.path.isfile(meta_file):
+        return None
+
+    with open(meta_file, "r", errors="replace") as f:
+        lines = f.readlines()
+
+    rand_start = None
+    for i, ln in enumerate(lines):
+        if "Randomized Orientation Log" in ln:
+            rand_start = i + 1
+            break
+    if rand_start is None:
+        return None
+
+    has_opto = any("Optomotor Mode" in ln or "Phase 1: Red LED" in ln for ln in lines)
+
+    arena_oris = []
+    for li in range(rand_start, len(lines)):
+        ln = lines[li].strip()
+        if not ln or ln.startswith("===") or ln.startswith("---"):
+            break
+
+        if pclass == "coupled":
+            # Plain "ori=" (not "led_ori="/"arena_ori=") -- lookbehind
+            # excludes anything preceded by "_", same as the MATLAB regex.
+            m = re.search(r"(?<!_)ori=(\d+)", ln)
+        else:  # decoupled
+            m = re.search(r"arena_ori=(\d+)", ln)
+        arena_oris.append(int(m.group(1)) if m else None)
+
+    if has_opto:
+        arena_oris = [None] + arena_oris + [None]
+
+    return arena_oris
+
+
+def parse_slashcirc_orientations(exp_path, protocol):
+    """
+    Per-cycle "visual orientation" for SlashCirc-family protocols (P033
+    coupled, P034 frozen), aligned to `nc` (OM1/OM2 padded with None to
+    match led_patterns/training_patterns). Mirrors
+    get_cycle_visual_scenes.m's local_scenes_slashcirc.
+
+    Unlike the SBD family, this family logs "=== Place Learning Block
+    Schedule ===" (not "=== Randomized Orientation Log ==="), and its
+    Pre-agitation line has no `ori=` field at all -- see
+    get_slashcirc_protocol_class.m header for the full metadata-format
+    gotchas.
+
+    Returns a list aligned to `nc`, or None if this protocol isn't in
+    SLASHCIRC_CLASS or the metadata can't be read/parsed. Output is merged
+    into the SAME "ao" JSON field the SBD family uses (see
+    parse_arena_orientations) -- for 'coupled' this is the per-trial ori
+    (varies), for 'frozen' it's the same constant frozen_visual_ori
+    repeated for every real trial (Ag/OM stay None either way).
+    """
+    pclass = SLASHCIRC_CLASS.get(protocol)
+    if pclass is None:
+        return None
+
+    meta_file = os.path.join(exp_path, "original_metadata.txt")
+    if not os.path.isfile(meta_file):
+        meta_file = os.path.join(exp_path, "copy_metadata.txt")
+    if not os.path.isfile(meta_file):
+        return None
+
+    with open(meta_file, "r", errors="replace") as f:
+        text = f.read()
+
+    sched_match = re.search(r"=== Place Learning Block Schedule ===", text)
+    if not sched_match:
+        return None
+    sched_start = sched_match.end()
+    end_match = re.search(r"=== Camera Configuration ===", text[sched_start:])
+    sched_end = sched_start + end_match.start() if end_match else len(text)
+    sched_lines = text[sched_start:sched_end].splitlines()
+
+    frozen_ori = None
+    if pclass == "frozen":
+        fm = re.search(r"Frozen Visual Orientation:\s*(\d+)", text)
+        if fm:
+            frozen_ori = int(fm.group(1))
+
+    has_opto = any("Optomotor Mode" in ln or "Phase 1: Red LED" in ln for ln in text.splitlines())
+
+    arena_oris = []
+    for ln in sched_lines:
+        ln = ln.strip()
+        if not ln or ln.startswith("===") or ln.startswith("---"):
+            continue
+        if "LED=" not in ln:
+            continue
+        if ln.lower().startswith("pre-agitation"):
+            arena_oris.append(None)
+            continue
+        m = re.search(r"ori=(\d+)", ln)
+        if not m:
+            arena_oris.append(None)
+            continue
+        arena_oris.append(int(m.group(1)) if pclass == "coupled" else frozen_ori)
+
+    if has_opto:
+        arena_oris = [None] + arena_oris + [None]
+
+    return arena_oris
 
 
 def get_protocol_labels(protocol, num_cycles):
@@ -309,6 +461,14 @@ def extract_experiment(exp_path, protocol):
         led_patterns = ["1111"] * nc
         training_patterns = ["1111"] * nc
 
+    # --- Parse per-cycle visual orientation (SBD or SlashCirc family) ---
+    arena_oris = parse_arena_orientations(exp_path, protocol)
+    if arena_oris is None:
+        arena_oris = parse_slashcirc_orientations(exp_path, protocol)
+    if arena_oris is not None and len(arena_oris) != nc:
+        print(f"    WARNING {exp_name}: arena_ori count ({len(arena_oris)}) != nc ({nc}) -- omitting 'ao' field")
+        arena_oris = None
+
     # --- Generate labels ---
     labels = get_protocol_labels(protocol, nc)
     if len(labels) != nc:
@@ -368,6 +528,12 @@ def extract_experiment(exp_path, protocol):
         "tp": training_patterns,
         "lb": labels,
         "flies": flies,
+        # "ao" (per-cycle arena/visual orientation, 0-3 or null) is only
+        # present for SBD-family coupled/decoupled protocols -- see
+        # SBD_CLASS / parse_arena_orientations. Other protocols (including
+        # featureless P031/P032, which never have a landmark) omit it
+        # entirely, so their JSON schema is unchanged.
+        **({"ao": arena_oris} if arena_oris is not None else {}),
     }
 
     print(f"    {exp_name}: {n_flies} flies, {nc} cycles")
